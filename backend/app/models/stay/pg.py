@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, String, Text, Boolean
 from app.core.database import Base
 
 
-class Hostel(Base):
-    __tablename__ = "hostels"
+class PG(Base):
+    __tablename__ = "pg"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
@@ -16,15 +16,15 @@ class Hostel(Base):
 
     phone_number = Column(String(20))
     email = Column(String(255))
-    website = Column(String(255))
     google_maps_link = Column(Text)
 
     room_types = Column(Text)  # Single / Double / Triple etc.
+
+    one_month_rent = Column(String(100), nullable=False)
+
+    food_included = Column(Boolean, default=False)
+
     facilities_available = Column(Text)
-
-    mess_available = Column(Boolean, default=False)
-
-    monthly_rent = Column(String(100), nullable=False)
 
     security_features = Column(Text)
 
