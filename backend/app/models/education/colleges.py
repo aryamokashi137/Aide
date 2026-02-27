@@ -23,9 +23,13 @@ class College(Base):
     fees = Column(String(100))
     placement_ratio = Column(Float)
 
-    #Relationship
-    reviews = relationship(
-        "Review",
-        back_populates="college",
-        cascade="all, delete"
-    )
+    # One College → Many Reviews
+    reviews = relationship("Review", back_populates="college", cascade="all, delete-orphan")
+    
+    
+    
+
+
+   
+   
+   

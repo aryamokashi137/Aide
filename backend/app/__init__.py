@@ -6,4 +6,5 @@ from app.models.education.mess import Mess
 from app.models.stay.hostels import Hostel
 from app.models.stay.pg import PG
 
+from app.models.user import User
 from app.models.education.review import Review

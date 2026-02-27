@@ -1,6 +1,7 @@
 import enum
 from sqlalchemy import Column, Integer, String, Text, Boolean, Float
 from app.core.database import Base
+from sqlalchemy.orm import relationship
 
 class MessType(str, enum.Enum):
     VEG = "Veg"
@@ -22,3 +23,5 @@ class Mess(Base):
     home_delivery_available = Column(Boolean)
     hygiene_rating = Column(Float)
     reviews = Column(Text)
+
+    hostels = relationship("Hostel", back_populates="mess", cascade="all, delete")

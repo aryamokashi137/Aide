@@ -1,6 +1,8 @@
 import enum
-from sqlalchemy import Column, Integer, String, Text, Boolean
+from sqlalchemy import Column, Integer, String, Text, Boolean ,ForeignKey
 from app.core.database import Base
+from sqlalchemy.orm import relationship
+
 
 class GenderType(str, enum.Enum):
     BOYS = "Boys"
@@ -29,3 +31,6 @@ class Hostel(Base):
     monthly_rent = Column(String(100), nullable=False)
     security_features = Column(Text)
     reviews = Column(Text)
+
+    mess_id = Column(Integer, ForeignKey("mess.id"))
+    mess = relationship("Mess", back_populates="hostels")

@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import Column, Integer, String, Text, Enum
 from app.core.database import Base
-
+from sqlalchemy.orm import relationship
 
 # School Type Enum
 class SchoolType(str, enum.Enum):
@@ -36,4 +36,6 @@ class School(Base):
     medium_of_instruction = Column(String(100))
     classes_offered = Column(String(255))
     fees = Column(String(100))
-    reviews = Column(Text)
+
+    # Proper One-to-Many relationship
+    reviews = relationship("Review", back_populates="school", cascade="all, delete-orphan")
