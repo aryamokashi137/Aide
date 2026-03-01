@@ -1,11 +1,12 @@
 from pydantic import BaseModel, Field, EmailStr, HttpUrl
 from typing import Optional
+from datetime import datetime
 from backend.app.models.education.coaching import CoachingType
 
 
 class CoachingBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=255)
-    type: CoachingType
+    coaching_type: CoachingType
     established_year: Optional[int] = Field(None, ge=1800, le=2026)
     courses_offered: Optional[str] = None
     exam_preparation_type: Optional[str] = Field(None, max_length=255)
@@ -25,7 +26,7 @@ class CoachingCreate(CoachingBase):
 
 class CoachingUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=3, max_length=255)
-    type: Optional[CoachingType] = None
+    coaching_type: Optional[CoachingType] = None
     established_year: Optional[int] = Field(None, ge=1800, le=2026)
     courses_offered: Optional[str] = None
     exam_preparation_type: Optional[str] = None
@@ -42,6 +43,8 @@ class CoachingUpdate(BaseModel):
 
 class CoachingResponse(CoachingBase):
     id: int
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

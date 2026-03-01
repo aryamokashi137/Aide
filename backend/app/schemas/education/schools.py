@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, EmailStr, HttpUrl
 from typing import Optional
+from datetime import datetime
 
 from backend.app.models.education.schools import SchoolType
 from backend.app.models.education.schools import BoardType
@@ -47,6 +48,11 @@ class SchoolUpdate(BaseModel):
 
 class SchoolResponse(SchoolBase):
     id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
+    class Config:
+        from_attributes = True
     class Config:
         from_attributes = True

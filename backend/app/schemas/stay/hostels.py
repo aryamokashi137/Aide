@@ -1,10 +1,11 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
-from app.models.education.hostel import GenderType, RoomType
+from datetime import datetime
+from app.models.stay.hostels import GenderType, RoomType
 
 class HostelBase(BaseModel):
     name: str
-    gender_type: GenderType
+    gender: GenderType
     description: Optional[str] = None
     address: str
     phone_number: Optional[str] = None
@@ -23,7 +24,7 @@ class HostelCreate(HostelBase):
 
 class HostelUpdate(BaseModel):
     name: Optional[str] = None
-    gender_type: Optional[GenderType] = None
+    gender: Optional[GenderType] = None
     description: Optional[str] = None
     address: Optional[str] = None
     phone_number: Optional[str] = None
@@ -39,5 +40,8 @@ class HostelUpdate(BaseModel):
 
 class HostelResponse(HostelBase):
     id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
