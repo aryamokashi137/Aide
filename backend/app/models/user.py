@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -25,6 +25,10 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.STUDENT, nullable=False)
 
     is_active = Column(Boolean, default=True)
+
+    # link to optional organization
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    organization = relationship("Organization", back_populates="users")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
