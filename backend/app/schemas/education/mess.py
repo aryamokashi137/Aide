@@ -8,7 +8,7 @@ class MessBase(BaseModel):
     meal_types: MessType
     description: Optional[str] = None
     address: Optional[str] = None
-    phone_number: Optional[str] = Field(None, max_length=20)
+    phone_number: Optional[str] = Field(None, max_length=50)
     google_maps_link: Optional[HttpUrl] = None
     monthly_charges: Optional[str] = Field(None, max_length=100)
     timing: Optional[str] = None
@@ -24,7 +24,7 @@ class MessUpdate(BaseModel):
     meal_types: Optional[MessType] = None
     description: Optional[str] = None
     address: Optional[str] = None
-    phone_number: Optional[str] = Field(None, max_length=20)
+    phone_number: Optional[str] = Field(None, max_length=50)
     google_maps_link: Optional[HttpUrl] = None
     monthly_charges: Optional[str] = Field(None, max_length=100)
     timing: Optional[str] = None

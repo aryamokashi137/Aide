@@ -25,7 +25,7 @@ class PGUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=3, max_length=255)
     description: Optional[str] = None
     address: Optional[str] = None
-    phone_number: Optional[str] = Field(None, max_length=20)
+    phone_number: Optional[str] = Field(None, max_length=50)
     email: Optional[EmailStr] = None
     google_maps_link: Optional[HttpUrl] = None
     one_month_rent: Optional[int] = Field(None, gt=0)

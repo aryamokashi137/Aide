@@ -25,7 +25,7 @@ class Hostel(Base):
     name = Column(String(255), nullable=False, index=True, unique=True)
     description = Column(Text, nullable=True)
     address = Column(Text, nullable=False)
-    phone_number = Column(String(20), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=False, index=True)
     email = Column(String(255), nullable=True, unique=True, index=True)
     website = Column(String(255), nullable=True)
     google_maps_link = Column(Text, nullable=True)

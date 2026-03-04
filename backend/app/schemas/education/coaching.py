@@ -12,7 +12,7 @@ class CoachingBase(BaseModel):
     exam_preparation_type: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     address: Optional[str] = None
-    phone_number: Optional[str] = Field(None, max_length=20)
+    phone_number: Optional[str] = Field(None, max_length=50)
     email: Optional[EmailStr] = None
     website: Optional[HttpUrl] = None
     google_maps_link: Optional[HttpUrl] = None

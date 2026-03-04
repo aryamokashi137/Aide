@@ -15,7 +15,7 @@ class SchoolBase(BaseModel):
     accreditation_grade: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
     address: Optional[str] = None
-    phone_number: Optional[str] = Field(None, max_length=20)
+    phone_number: Optional[str] = Field(None, max_length=50)
     email: Optional[EmailStr] = None
     website: Optional[HttpUrl] = None
     google_maps_link: Optional[HttpUrl] = None
@@ -37,7 +37,7 @@ class SchoolUpdate(BaseModel):
     accreditation_grade: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
     address: Optional[str] = None
-    phone_number: Optional[str] = Field(None, max_length=20)
+    phone_number: Optional[str] = Field(None, max_length=50)
     email: Optional[EmailStr] = None
     website: Optional[HttpUrl] = None
     google_maps_link: Optional[HttpUrl] = None

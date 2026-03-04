@@ -21,7 +21,7 @@ class College(Base):
     college_code = Column(String(50), nullable=True, unique=True, index=True)
     description = Column(Text, nullable=True)
     address = Column(Text, nullable=False)
-    phone_number = Column(String(20), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=False, index=True)
     website = Column(String(255), nullable=True)
     google_maps_link = Column(String(500), nullable=True)
     streams_available = Column(Text, nullable=True)

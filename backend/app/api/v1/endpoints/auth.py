@@ -30,6 +30,7 @@ from app.schemas.user import (
     RefreshTokenRequest,
     RefreshTokenResponse,
 )
+from fastapi.security import OAuth2PasswordRequestForm 
 
 router = APIRouter()
 
@@ -84,22 +85,22 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 # LOGIN
 @router.post("/login", response_model=Token)
-async def login(credentials: UserLogin, db: Session = Depends(get_db)):
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     try:
-        email = credentials.email.lower().strip()
+        email = form_data.username.lower().strip()
 
-        # Find user by email
         user = db.query(User).filter(User.email == email).first()
 
-        # Validate credentials
-        if not user or not verify_password(credentials.password, user.hashed_password):
+        if not user or not verify_password(form_data.password, user.hashed_password):
             logger.warning(f"Failed login attempt for: {email}")
             raise UnauthorizedError("Incorrect email or password")
 
         if not user.is_active:
             raise ForbiddenError("User account is inactive")
 
-        # Create tokens
         access_token_expires = timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
