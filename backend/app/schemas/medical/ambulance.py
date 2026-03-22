@@ -28,6 +28,7 @@ class AmbulanceUpdate(BaseModel):
 class AmbulanceResponse(AmbulanceBase):
     id: int
     is_active: bool
+    distance: Optional[float] = None  # in km
     created_at: datetime
     updated_at: datetime
 

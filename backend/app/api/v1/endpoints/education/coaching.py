@@ -21,16 +21,49 @@ router = APIRouter(
     tags=["Coaching"]
 )
 
+from app.core.location import calculate_haversine_distance
+
 # ------------------- GET ALL -------------------
 @router.get("/", response_model=List[CoachingResponse])
 async def get_coaching_classes(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    name: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    lat: Optional[float] = Query(None, description="User's current latitude"),
+    lon: Optional[float] = Query(None, description="User's current longitude"),
+    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    coaching_classes = db.query(Coaching).filter(Coaching.is_active == True).offset(skip).limit(limit).all()
-    return coaching_classes
+    """
+    Get coaching classes with optional name/type filtering and nearby search.
+    """
+    query = db.query(Coaching).filter(Coaching.is_active == True)
+    if name:
+        query = query.filter(Coaching.name.ilike(f"%{name}%"))
+    if type:
+        query = query.filter(Coaching.coaching_type == type) # coaching_type is Enum
+    
+    # Execute query
+    coaching_classes = query.all()
+    
+    # Logic for nearby search
+    if lat is not None and lon is not None:
+        nearby_coaching = []
+        for coaching in coaching_classes:
+            if coaching.latitude and coaching.longitude:
+                dist = calculate_haversine_distance(lat, lon, coaching.latitude, coaching.longitude)
+                coaching.distance = round(dist, 2)
+                
+                if radius is None or dist <= radius:
+                    nearby_coaching.append(coaching)
+        
+        nearby_coaching.sort(key=lambda x: x.distance)
+        return nearby_coaching[skip : skip + limit]
+        
+    # Standard pagination
+    return query.offset(skip).limit(limit).all()
 
 # ------------------- GET ONE -------------------
 @router.get("/{coaching_id}", response_model=CoachingResponse)

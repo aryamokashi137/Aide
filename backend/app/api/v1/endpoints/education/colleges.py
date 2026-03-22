@@ -21,15 +21,48 @@ router = APIRouter(
     tags=["Colleges"]
 )
 
+from app.core.location import calculate_haversine_distance
+
 @router.get("/", response_model=List[CollegeResponse])
 async def get_colleges(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    name: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    lat: Optional[float] = Query(None, description="User's current latitude"),
+    lon: Optional[float] = Query(None, description="User's current longitude"),
+    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    colleges = db.query(College).filter(College.is_active == True).offset(skip).limit(limit).all()
-    return colleges
+    """
+    Get colleges with optional name/type filtering and nearby search.
+    """
+    query = db.query(College).filter(College.is_active == True)
+    if name:
+        query = query.filter(College.name.ilike(f"%{name}%"))
+    if type:
+        query = query.filter(College.type.ilike(f"%{type}%"))
+    
+    # Execute query
+    colleges = query.all()
+    
+    # Logic for nearby search
+    if lat is not None and lon is not None:
+        nearby_colleges = []
+        for college in colleges:
+            if college.latitude and college.longitude:
+                dist = calculate_haversine_distance(lat, lon, college.latitude, college.longitude)
+                college.distance = round(dist, 2)
+                
+                if radius is None or dist <= radius:
+                    nearby_colleges.append(college)
+        
+        nearby_colleges.sort(key=lambda x: x.distance)
+        return nearby_colleges[skip : skip + limit]
+        
+    # Standard pagination
+    return query.offset(skip).limit(limit).all()
 
 @router.get("/{college_id}", response_model=CollegeResponse)
 async def get_college(

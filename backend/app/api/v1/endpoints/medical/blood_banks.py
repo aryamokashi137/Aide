@@ -11,30 +11,50 @@ from app.schemas.medical.blood_bank import BloodBankCreate, BloodBankUpdate, Blo
 
 router = APIRouter(prefix="/blood-banks", tags=["Blood Banks"])
 
+from app.core.location import calculate_haversine_distance
+
 @router.get("/", response_model=List[BloodBankResponse])
 async def get_blood_banks(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    name: Optional[str] = Query(None),
     blood_group: Optional[str] = Query(None, description="Check availability for blood group, e.g., 'A+'"),
+    lat: Optional[float] = Query(None, description="User's current latitude"),
+    lon: Optional[float] = Query(None, description="User's current longitude"),
+    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """
+    Get blood banks with optional name/blood group filtering and nearby search.
+    """
     query = db.query(BloodBank).filter(BloodBank.is_active == True)
+    if name:
+        query = query.filter(BloodBank.name.ilike(f"%{name}%"))
     
-    # Simple check if blood_group exists in JSON (SQLite/Postgres JSON supports differ slightly, but this is a rough filter)
-    # For production, you might want more complex JSON queries if using Postgres
-    if blood_group:
-        # This is a very basic filter. For SQLite it's tricky, for Postgres use JSONB containment.
-        # Here we just fetch and filter in Python if needed, or use a simple LIKE on the column for rough matches.
-        pass # Better to implement specific DB filters depending on the DB type
-        
-    blood_banks = query.offset(skip).limit(limit).all()
+    # Execute query
+    blood_banks = query.all()
     
+    # Blood group filter (Python level for simplicity across DB types)
     if blood_group:
-        # Final filter in Python for availability
         blood_banks = [bb for bb in blood_banks if bb.blood_group_units and bb.blood_group_units.get(blood_group, 0) > 0]
         
-    return blood_banks
+    # Logic for nearby search
+    if lat is not None and lon is not None:
+        nearby_bb = []
+        for bb in blood_banks:
+            if bb.latitude and bb.longitude:
+                dist = calculate_haversine_distance(lat, lon, bb.latitude, bb.longitude)
+                bb.distance = round(dist, 2)
+                
+                if radius is None or dist <= radius:
+                    nearby_bb.append(bb)
+        
+        nearby_bb.sort(key=lambda x: x.distance)
+        return nearby_bb[skip : skip + limit]
+        
+    # Standard pagination for non-location search
+    return blood_banks[skip : skip + limit]
 
 
 @router.get("/{blood_bank_id}", response_model=BloodBankResponse)

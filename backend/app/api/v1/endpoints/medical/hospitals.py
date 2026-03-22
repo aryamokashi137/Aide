@@ -11,22 +11,57 @@ from app.models.medical.review import MedicalReview
 from app.schemas.medical.hospital import HospitalCreate, HospitalUpdate, HospitalResponse
 from app.schemas.medical.review import MedicalReviewCreate, MedicalReviewResponse
 
+from app.core.location import calculate_haversine_distance
+
 router = APIRouter(prefix="/hospitals", tags=["Hospitals"])
 
 @router.get("/", response_model=List[HospitalResponse])
 async def get_hospitals(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    name: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    lat: Optional[float] = Query(None, description="User's current latitude"),
+    lon: Optional[float] = Query(None, description="User's current longitude"),
+    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """
+    Get hospitals with optional category filtering and nearby search.
+    If lat and lon are provided, hospitals will be sorted by distance.
+    If radius is also provided, results will be filtered within that radius.
+    """
     query = db.query(Hospital).filter(Hospital.is_active == True)
+    if name:
+        query = query.filter(Hospital.name.ilike(f"%{name}%"))
     if category:
         query = query.filter(Hospital.category.ilike(f"%{category}%"))
     
-    hospitals = query.offset(skip).limit(limit).all()
-    return hospitals
+    # Execute query
+    hospitals = query.all()
+    
+    # Logic for nearby search
+    if lat is not None and lon is not None:
+        nearby_hospitals = []
+        for hospital in hospitals:
+            if hospital.latitude and hospital.longitude:
+                dist = calculate_haversine_distance(lat, lon, hospital.latitude, hospital.longitude)
+                
+                # Assign distance to the model object (Pydantic will pick it up)
+                hospital.distance = round(dist, 2)
+                
+                if radius is None or dist <= radius:
+                    nearby_hospitals.append(hospital)
+        
+        # Sort by distance
+        nearby_hospitals.sort(key=lambda x: x.distance)
+        
+        # Apply pagination after sorting
+        return nearby_hospitals[skip : skip + limit]
+        
+    # Standard pagination for non-location search
+    return query.offset(skip).limit(limit).all()
 
 
 @router.get("/{hospital_id}", response_model=HospitalResponse)

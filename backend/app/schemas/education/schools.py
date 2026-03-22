@@ -51,10 +51,9 @@ class SchoolUpdate(BaseModel):
 class SchoolResponse(SchoolBase):
     id: int
     is_active: bool
+    distance: Optional[float] = None  # in km
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
     class Config:
         from_attributes = True

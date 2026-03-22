@@ -47,6 +47,7 @@ class PGUpdate(BaseModel):
 class PGResponse(PGBase):
     id: int
     is_active: bool
+    distance: Optional[float] = None  # in km
     created_at: datetime
     updated_at: datetime
 

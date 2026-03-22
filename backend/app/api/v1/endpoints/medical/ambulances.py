@@ -11,23 +11,51 @@ from app.schemas.medical.ambulance import AmbulanceCreate, AmbulanceUpdate, Ambu
 
 router = APIRouter(prefix="/ambulances", tags=["Ambulances"])
 
+from app.core.location import calculate_haversine_distance
+
 @router.get("/", response_model=List[AmbulanceResponse])
 async def get_ambulances(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    name: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
     available_only: bool = Query(False),
+    lat: Optional[float] = Query(None, description="User's current latitude"),
+    lon: Optional[float] = Query(None, description="User's current longitude"),
+    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """
+    Get ambulances with optional name/type filtering and nearby search.
+    """
     query = db.query(Ambulance).filter(Ambulance.is_active == True)
+    if name:
+        query = query.filter(Ambulance.provider_name.ilike(f"%{name}%"))
     if type:
         query = query.filter(Ambulance.type.ilike(f"%{type}%"))
     if available_only:
         query = query.filter(Ambulance.availability == True)
     
-    ambulances = query.offset(skip).limit(limit).all()
-    return ambulances
+    # Execute query
+    ambulances = query.all()
+    
+    # Logic for nearby search
+    if lat is not None and lon is not None:
+        nearby_ambulances = []
+        for ambulance in ambulances:
+            if ambulance.latitude and ambulance.longitude:
+                dist = calculate_haversine_distance(lat, lon, ambulance.latitude, ambulance.longitude)
+                ambulance.distance = round(dist, 2)
+                
+                if radius is None or dist <= radius:
+                    nearby_ambulances.append(ambulance)
+        
+        nearby_ambulances.sort(key=lambda x: x.distance)
+        return nearby_ambulances[skip : skip + limit]
+        
+    # Standard pagination
+    return query.offset(skip).limit(limit).all()
 
 
 @router.get("/{ambulance_id}", response_model=AmbulanceResponse)

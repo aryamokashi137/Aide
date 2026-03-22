@@ -21,16 +21,46 @@ router = APIRouter(
     tags=["Mess"]
 )
 
+from app.core.location import calculate_haversine_distance
+
 # ------------------- GET ALL -------------------
 @router.get("/", response_model=List[MessResponse])
 async def get_mess_list(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    name: Optional[str] = Query(None),
+    lat: Optional[float] = Query(None, description="User's current latitude"),
+    lon: Optional[float] = Query(None, description="User's current longitude"),
+    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    mess_list = db.query(Mess).filter(Mess.is_active == True).offset(skip).limit(limit).all()
-    return mess_list
+    """
+    Get mess list with optional name filtering and nearby search.
+    """
+    query = db.query(Mess).filter(Mess.is_active == True)
+    if name:
+        query = query.filter(Mess.name.ilike(f"%{name}%"))
+    
+    # Execute query
+    mess_list = query.all()
+    
+    # Logic for nearby search
+    if lat is not None and lon is not None:
+        nearby_mess = []
+        for mess in mess_list:
+            if mess.latitude and mess.longitude:
+                dist = calculate_haversine_distance(lat, lon, mess.latitude, mess.longitude)
+                mess.distance = round(dist, 2)
+                
+                if radius is None or dist <= radius:
+                    nearby_mess.append(mess)
+        
+        nearby_mess.sort(key=lambda x: x.distance)
+        return nearby_mess[skip : skip + limit]
+        
+    # Standard pagination
+    return query.offset(skip).limit(limit).all()
 
 # ------------------- GET ONE -------------------
 @router.get("/{mess_id}", response_model=MessResponse)

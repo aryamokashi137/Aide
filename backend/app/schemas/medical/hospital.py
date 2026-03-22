@@ -36,6 +36,7 @@ class HospitalUpdate(BaseModel):
 class HospitalResponse(HospitalBase):
     id: int
     is_active: bool
+    distance: Optional[float] = None  # in km, calculated if lat/lon provided
     created_at: datetime
     updated_at: datetime
 

@@ -32,6 +32,7 @@ class BloodBankUpdate(BaseModel):
 class BloodBankResponse(BloodBankBase):
     id: int
     is_active: bool
+    distance: Optional[float] = None  # in km
     created_at: datetime
     updated_at: datetime
 
