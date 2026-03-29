@@ -49,6 +49,7 @@ class CollegeResponse(CollegeBase):
     id: int
     is_active: bool
     distance: Optional[float] = None  # in km
+    rating: Optional[float] = 0.0
     created_at: datetime
     updated_at: datetime
 

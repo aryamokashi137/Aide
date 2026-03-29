@@ -15,61 +15,151 @@ from app.schemas.education.schools import (
 )
 from app.api.v1.endpoints.deps import get_current_user, require_roles
 from fastapi.encoders import jsonable_encoder
+from enum import Enum
+from fastapi_cache.decorator import cache
 
-router = APIRouter(
-    prefix="/schools",
-    tags=["Schools"]
-)
+router = APIRouter(prefix="/schools", tags=["Schools"])
 
+from pydantic import Field
+from sqlalchemy import func, or_
 from app.core.location import calculate_haversine_distance
+from app.core.redis import geo_search_nearby, redis_client
+import json
+import hashlib
 
-# ------------------- GET ALL -------------------
+# 1. Enums for type-safe filtering
+class SortBy(str, Enum):
+    DISTANCE = "distance"
+    RATING = "rating"
+    NAME = "name"
+
+class Order(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+# 2. Dependency class for clean filters
+class SchoolFilterParams:
+    def __init__(
+        self,
+        skip: int = Query(0, ge=0),
+        limit: int = Query(10, ge=1, le=100),
+        type: Optional[SchoolType] = Query(None, description="Filter by School Type"),
+        board: Optional[BoardType] = Query(None, description="Filter by Board Type"),
+        query: Optional[str] = Query(None, description="Search by name or address"),
+        lat: Optional[float] = Query(None, ge=-90, le=90),
+        lon: Optional[float] = Query(None, ge=-180, le=180),
+        radius: Optional[float] = Query(10.0, ge=0.1, le=100.0),
+        sort_by: Optional[SortBy] = Query(SortBy.NAME),
+        order: Optional[Order] = Query(Order.ASC)
+    ):
+        self.skip = skip
+        self.limit = limit
+        self.type = type
+        self.board = board
+        self.query = query
+        self.lat = lat
+        self.lon = lon
+        self.radius = radius
+        self.sort_by = sort_by
+        self.order = order
+
+    def get_cache_key(self) -> str:
+        params_dict = {k: str(v) for k, v in self.__dict__.items()}
+        params_str = json.dumps(params_dict, sort_keys=True)
+        return f"schools_search:{hashlib.md5(params_str.encode()).hexdigest()}"
+
 @router.get("/", response_model=List[SchoolResponse])
 async def get_schools(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    name: Optional[str] = Query(None),
-    type: Optional[str] = Query(None),
-    board: Optional[str] = Query(None),
-    lat: Optional[float] = Query(None, description="User's current latitude"),
-    lon: Optional[float] = Query(None, description="User's current longitude"),
-    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
+    filters: SchoolFilterParams = Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
-    Get schools with optional name/type/board filtering and nearby search.
+    Get schools with advanced dynamic filtering, caching, and geo-proximity sorting.
     """
-    query = db.query(School).filter(School.is_active == True)
-    if name:
-        query = query.filter(School.name.ilike(f"%{name}%"))
-    if type:
-        query = query.filter(School.type.ilike(f"%{type}%"))
-    if board:
-        query = query.filter(School.board.ilike(f"%{board}%"))
+    # 1. Cache lookup
+    cache_key = filters.get_cache_key()
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"Cache miss error: {e}")
+
+    # 2. Build Base Query
+    query = db.query(
+        School, 
+        func.avg(Review.rating).label("avg_rating")
+    ).outerjoin(Review, Review.school_id == School.id)\
+     .filter(School.is_active == True)\
+     .group_by(School.id)
+
+    # 3. Dynamic Filters
+    if filters.type:
+        query = query.filter(School.type == filters.type)
+    if filters.board:
+        query = query.filter(School.board == filters.board)
+    if filters.query:
+        search = f"%{filters.query}%"
+        query = query.filter(or_(School.name.ilike(search), School.address.ilike(search)))
+
+    # 4. Geo-spatial Logic
+    schools_list = []
+    use_geo = all(v is not None for v in [filters.lat, filters.lon])
     
-    # Execute query
-    schools = query.all()
+    if use_geo:
+        nearby_results = await geo_search_nearby("geo:schools", filters.lon, filters.lat, filters.radius)
+        nearby_ids = [res["id"] for res in nearby_results]
+        dist_map = {res["id"]: res["dist"] for res in nearby_results}
+        
+        query = query.filter(School.id.in_(nearby_ids))
+        results = query.all()
+        for school, avg_rating in results:
+            school.distance = dist_map.get(school.id)
+            school.rating = float(avg_rating) if avg_rating else 0.0
+            schools_list.append(school)
+    else:
+        results = query.all()
+        for school, avg_rating in results:
+            school.rating = float(avg_rating) if avg_rating else 0.0
+            school.distance = None
+            schools_list.append(school)
+
+    # 5. Sorting
+    is_desc = (filters.order == Order.DESC)
+    if filters.sort_by == SortBy.DISTANCE and use_geo:
+        schools_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
+    elif filters.sort_by == SortBy.RATING:
+        schools_list.sort(key=lambda x: x.rating, reverse=is_desc)
+    elif filters.sort_by == SortBy.NAME:
+        schools_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
+
+    # 6. Pagination & Caching
+    final_results = schools_list[filters.skip : filters.skip + filters.limit]
     
-    # Logic for nearby search
-    if lat is not None and lon is not None:
-        nearby_schools = []
-        for school in schools:
-            if school.latitude and school.longitude:
-                dist = calculate_haversine_distance(lat, lon, school.latitude, school.longitude)
-                school.distance = round(dist, 2)
-                
-                if radius is None or dist <= radius:
-                    nearby_schools.append(school)
-        
-        nearby_schools.sort(key=lambda x: x.distance)
-        return nearby_schools[skip : skip + limit]
-        
-    # Standard pagination
-    return query.offset(skip).limit(limit).all()
+    from fastapi.encoders import jsonable_encoder
+    json_data = jsonable_encoder(final_results)
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(json_data))
+    except Exception as e:
+        logger.error(f"Cache failed: {e}")
+    return final_results
+
+# ------------------- FILTERS ALIAS -------------------
+@router.get("/filters", response_model=List[SchoolResponse])
+async def get_schools_filtered(
+    filters: SchoolFilterParams = Depends(),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Alias for the main schools search endpoint.
+    """
+    return await get_schools(filters, db, current_user)
 
 # ------------------- GET ONE -------------------
 @router.get("/{school_id}", response_model=SchoolResponse)
+@cache(expire=60)
 async def get_school(
     school_id: int,
     db: Session = Depends(get_db),
@@ -177,6 +267,11 @@ async def update_school(
 
     db.commit()
     db.refresh(school)
+    
+    # Sync with Redis Geo
+    if school.latitude and school.longitude:
+        await geo_add_location("geo:schools", school.longitude, school.latitude, school.id)
+        
     return school
 
 # ------------------- DELETE -------------------
@@ -195,8 +290,9 @@ async def delete_school(
         )
 
     # Soft delete
-    school.is_active = False
-    db.commit()
+    # Remove from Redis Geo Index
+    await geo_remove_location("geo:schools", school_id)
+    
     return None
 
 # ------------------- REVIEWS -------------------

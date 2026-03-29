@@ -11,25 +11,133 @@ from app.models.medical.review import MedicalReview
 from app.schemas.medical.doctor import DoctorCreate, DoctorUpdate, DoctorResponse
 from app.schemas.medical.review import MedicalReviewCreate, MedicalReviewResponse
 
+from enum import Enum
+
+class SortBy(str, Enum):
+    DISTANCE = "distance"
+    RATING = "rating"
+    NAME = "name"
+
+class Order(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+class DoctorSpecialization(str, Enum):
+    CARDIOLOGIST = "Cardiologist"
+    DERMATOLOGIST = "Dermatologist"
+    NEUROLOGIST = "Neurologist"
+    PEDIATRICIAN = "Pediatrician"
+    PSYCHIATRIST = "Psychiatrist"
+    SURGEON = "Surgeon"
+    GENERAL_PHYSICIAN = "General Physician"
+
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
+
+from sqlalchemy import func, or_
+from app.core.redis import redis_client
+import json
+import hashlib
+
+# 1. Enums for type-safe filtering
+# SortBy, Order, DoctorSpecialization are already defined above
+
+# 2. Dependency class for clean filters
+class DoctorFilterParams:
+    def __init__(
+        self,
+        skip: int = Query(0, ge=0),
+        limit: int = Query(10, ge=1, le=100),
+        specialization: Optional[DoctorSpecialization] = Query(None, description="Filter by Specialization"),
+        hospital_id: Optional[int] = Query(None, description="Filter by Hospital ID"),
+        query: Optional[str] = Query(None, description="Search by doctor name"),
+        sort_by: Optional[SortBy] = Query(SortBy.NAME),
+        order: Optional[Order] = Query(Order.ASC)
+    ):
+        self.skip = skip
+        self.limit = limit
+        self.specialization = specialization
+        self.hospital_id = hospital_id
+        self.query = query
+        self.sort_by = sort_by
+        self.order = order
+
+    def get_cache_key(self) -> str:
+        params_dict = {k: str(v) for k, v in self.__dict__.items()}
+        params_str = json.dumps(params_dict, sort_keys=True)
+        return f"doctors_search:{hashlib.md5(params_str.encode()).hexdigest()}"
 
 @router.get("/", response_model=List[DoctorResponse])
 async def get_doctors(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    specialization: Optional[str] = Query(None),
-    hospital_id: Optional[int] = Query(None),
+    filters: DoctorFilterParams = Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    query = db.query(Doctor).filter(Doctor.is_active == True)
-    if specialization:
-        query = query.filter(Doctor.specialization.ilike(f"%{specialization}%"))
-    if hospital_id:
-        query = query.filter(Doctor.hospital_id == hospital_id)
+    """
+    Get doctors with advanced dynamic filtering, caching, and hospital sorting.
+    """
+    # 1. Cache lookup
+    cache_key = filters.get_cache_key()
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"Cache miss error: {e}")
+
+    # 2. Build Base Query
+    query = db.query(
+        Doctor, 
+        func.avg(MedicalReview.rating).label("avg_rating")
+    ).outerjoin(MedicalReview, MedicalReview.doctor_id == Doctor.id)\
+     .filter(Doctor.is_active == True)\
+     .group_by(Doctor.id)
+
+    # 3. Dynamic Filters
+    if filters.specialization:
+        query = query.filter(Doctor.specialization == filters.specialization)
+    if filters.hospital_id:
+        query = query.filter(Doctor.hospital_id == filters.hospital_id)
+    if filters.query:
+        search = f"%{filters.query}%"
+        query = query.filter(Doctor.name.ilike(search))
+
+    # 4. Fetch results
+    results = query.all()
+    doctors_list = []
+    for doctor, avg_rating in results:
+        doctor.rating = float(avg_rating) if avg_rating else 0.0
+        doctors_list.append(doctor)
+
+    # 5. Sorting
+    is_desc = (filters.order == Order.DESC)
+    if filters.sort_by == SortBy.RATING:
+        doctors_list.sort(key=lambda x: x.rating, reverse=is_desc)
+    elif filters.sort_by == SortBy.NAME:
+        doctors_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
+
+    # 6. Pagination & Caching
+    final_results = doctors_list[filters.skip : filters.skip + filters.limit]
     
-    doctors = query.offset(skip).limit(limit).all()
-    return doctors
+    from fastapi.encoders import jsonable_encoder
+    json_data = jsonable_encoder(final_results)
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(json_data))
+    except Exception as e:
+        logger.error(f"Cache failed: {e}")
+
+    return final_results
+
+# ------------------- FILTERS ALIAS -------------------
+@router.get("/filters", response_model=List[DoctorResponse])
+async def get_doctors_filtered(
+    filters: DoctorFilterParams = Depends(),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Alias for the main doctors search endpoint.
+    """
+    return await get_doctors(filters, db, current_user)
 
 @router.get("/{doctor_id}", response_model=DoctorResponse)
 async def get_doctor(

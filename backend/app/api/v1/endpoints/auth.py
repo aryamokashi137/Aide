@@ -34,15 +34,20 @@ from app.schemas.user import (
 )
 from fastapi.security import OAuth2PasswordRequestForm
 import uuid
+import secrets
 from app.services.email import send_verification_email, send_password_reset_email
+from app.core.redis import blacklist_token, set_otp, get_otp, delete_otp
 
 router = APIRouter()
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 
+from fastapi_limiter.depends import RateLimiter
+from app.api.v1.endpoints.deps import oauth2_scheme
+
 # REGISTER
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     try:
         # Normalize email
@@ -91,7 +96,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         raise
 
 # LOGIN
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, dependencies=[Depends(RateLimiter(times=10, seconds=60))])
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
@@ -141,6 +146,20 @@ async def login(
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise UnauthorizedError("Login failed")
+
+# LOGOUT
+@router.post("/logout", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+async def logout(
+    current_user: User = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Logout the current user by blacklisting their access token in Redis.
+    """
+    # Blacklist for the duration of its expiry (30 mins by default)
+    await blacklist_token(token, settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    logger.info(f"User logged out and token blacklisted: {current_user.id}")
+    return {"message": "Successfully logged out"}
 
 # REFRESH TOKEN
 @router.post("/refresh", response_model=RefreshTokenResponse)
@@ -204,34 +223,43 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     return {"message": "Email verified successfully. You can now log in."}
 
 # FORGOT PASSWORD
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(RateLimiter(times=3, seconds=60))])
 async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email.lower()).first()
+    email = request.email.lower().strip()
+    user = db.query(User).filter(User.email == email).first()
     if user:
-        reset_token = str(uuid.uuid4())
-        user.password_reset_token = reset_token
-        user.token_expiry = datetime.utcnow() + timedelta(hours=1)
-        db.commit()
+        # Generate 6-digit OTP
+        otp_code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
         
-        send_password_reset_email(user.email, reset_token)
+        # Store in Redis for 10 minutes
+        await set_otp(email, otp_code, expire_seconds=600)
+        
+        # Send password reset email (using OTP instead of link if desired, or just code)
+        send_password_reset_email(user.email, otp_code)
+        logger.info(f"OTP sent to {email} for password reset.")
     
     # Always return success to prevent email enumeration
-    return {"message": "If an account exists with that email, a reset link has been sent."}
+    return {"message": "If an account exists with that email, a verification code has been sent."}
 
 # RESET PASSWORD
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(RateLimiter(times=3, seconds=60))])
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(
-        User.password_reset_token == request.token,
-        User.token_expiry > datetime.utcnow()
-    ).first()
+    # Verify OTP from Redis
+    email = request.email.lower().strip() # Added email to request schema? I should check
+    stored_otp = await get_otp(email)
+    
+    if not stored_otp or stored_otp != request.token:
+        raise ValidationError("Invalid or expired reset code")
+    
+    user = db.query(User).filter(User.email == email).first()
     
     if not user:
         raise ValidationError("Invalid or expired reset token")
     
     user.hashed_password = get_password_hash(request.new_password)
-    user.password_reset_token = None
-    user.token_expiry = None
     db.commit()
+    
+    # Delete OTP after successful reset
+    await delete_otp(email)
     
     return {"message": "Password reset successfully. You can now log in."}

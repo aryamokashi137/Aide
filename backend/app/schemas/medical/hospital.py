@@ -37,6 +37,7 @@ class HospitalResponse(HospitalBase):
     id: int
     is_active: bool
     distance: Optional[float] = None  # in km, calculated if lat/lon provided
+    rating: Optional[float] = 0.0
     created_at: datetime
     updated_at: datetime
 

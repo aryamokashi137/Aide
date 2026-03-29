@@ -15,58 +15,148 @@ from app.schemas.education.coaching import (
 )
 from app.api.v1.endpoints.deps import get_current_user, require_roles
 from fastapi.encoders import jsonable_encoder
+from enum import Enum
+from fastapi_cache.decorator import cache
 
-router = APIRouter(
-    prefix="/coaching",
-    tags=["Coaching"]
-)
+router = APIRouter(prefix="/coaching", tags=["Coaching"])
 
+from pydantic import Field
+from sqlalchemy import func, or_
 from app.core.location import calculate_haversine_distance
+from app.core.redis import geo_search_nearby, redis_client
+import json
+import hashlib
 
-# ------------------- GET ALL -------------------
+# 1. Enums for type-safe filtering
+class SortBy(str, Enum):
+    DISTANCE = "distance"
+    RATING = "rating"
+    NAME = "name"
+
+class Order(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+# 2. Dependency class for clean filters
+class CoachingFilterParams:
+    def __init__(
+        self,
+        skip: int = Query(0, ge=0),
+        limit: int = Query(10, ge=1, le=100),
+        type: Optional[CoachingType] = Query(None, description="Filter by Coaching Type"),
+        query: Optional[str] = Query(None, description="Search by name or address"),
+        lat: Optional[float] = Query(None, ge=-90, le=90),
+        lon: Optional[float] = Query(None, ge=-180, le=180),
+        radius: Optional[float] = Query(10.0, ge=0.5, le=100.0),
+        sort_by: Optional[SortBy] = Query(SortBy.NAME),
+        order: Optional[Order] = Query(Order.ASC)
+    ):
+        self.skip = skip
+        self.limit = limit
+        self.type = type
+        self.query = query
+        self.lat = lat
+        self.lon = lon
+        self.radius = radius
+        self.sort_by = sort_by
+        self.order = order
+
+    def get_cache_key(self) -> str:
+        params_dict = {k: str(v) for k, v in self.__dict__.items()}
+        params_str = json.dumps(params_dict, sort_keys=True)
+        return f"coaching_search:{hashlib.md5(params_str.encode()).hexdigest()}"
+
 @router.get("/", response_model=List[CoachingResponse])
 async def get_coaching_classes(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    name: Optional[str] = Query(None),
-    type: Optional[str] = Query(None),
-    lat: Optional[float] = Query(None, description="User's current latitude"),
-    lon: Optional[float] = Query(None, description="User's current longitude"),
-    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
+    filters: CoachingFilterParams = Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
-    Get coaching classes with optional name/type filtering and nearby search.
+    Get coaching classes with advanced dynamic filtering, caching, and geo-proximity sorting.
     """
-    query = db.query(Coaching).filter(Coaching.is_active == True)
-    if name:
-        query = query.filter(Coaching.name.ilike(f"%{name}%"))
-    if type:
-        query = query.filter(Coaching.coaching_type == type) # coaching_type is Enum
+    # 1. Cache lookup
+    cache_key = filters.get_cache_key()
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"Cache miss error: {e}")
+
+    # 2. Build Base Query
+    query = db.query(
+        Coaching, 
+        func.avg(Review.rating).label("avg_rating")
+    ).outerjoin(Review, Review.coaching_id == Coaching.id)\
+     .filter(Coaching.is_active == True)\
+     .group_by(Coaching.id)
+
+    # 3. Dynamic Filters
+    if filters.type:
+        query = query.filter(Coaching.coaching_type == filters.type)
+    if filters.query:
+        search = f"%{filters.query}%"
+        query = query.filter(or_(Coaching.name.ilike(search), Coaching.address.ilike(search)))
+
+    # 4. Geo-spatial Logic
+    coaching_data_list = []
+    use_geo = all(v is not None for v in [filters.lat, filters.lon])
     
-    # Execute query
-    coaching_classes = query.all()
+    if use_geo:
+        nearby_results = await geo_search_nearby("geo:coaching", filters.lon, filters.lat, filters.radius)
+        nearby_ids = [res["id"] for res in nearby_results]
+        dist_map = {res["id"]: res["dist"] for res in nearby_results}
+        
+        query = query.filter(Coaching.id.in_(nearby_ids))
+        results = query.all()
+        for coaching, avg_rating in results:
+            coaching.distance = dist_map.get(coaching.id)
+            coaching.rating = float(avg_rating) if avg_rating else 0.0
+            coaching_data_list.append(coaching)
+    else:
+        results = query.all()
+        for coaching, avg_rating in results:
+            coaching.rating = float(avg_rating) if avg_rating else 0.0
+            coaching.distance = None
+            coaching_data_list.append(coaching)
+
+    # 5. Sorting
+    is_desc = (filters.order == Order.DESC)
+    if filters.sort_by == SortBy.DISTANCE and use_geo:
+        coaching_data_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
+    elif filters.sort_by == SortBy.RATING:
+        coaching_data_list.sort(key=lambda x: x.rating, reverse=is_desc)
+    elif filters.sort_by == SortBy.NAME:
+        coaching_data_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
+
+    # 6. Pagination & Caching
+    final_results = coaching_data_list[filters.skip : filters.skip + filters.limit]
     
-    # Logic for nearby search
-    if lat is not None and lon is not None:
-        nearby_coaching = []
-        for coaching in coaching_classes:
-            if coaching.latitude and coaching.longitude:
-                dist = calculate_haversine_distance(lat, lon, coaching.latitude, coaching.longitude)
-                coaching.distance = round(dist, 2)
-                
-                if radius is None or dist <= radius:
-                    nearby_coaching.append(coaching)
-        
-        nearby_coaching.sort(key=lambda x: x.distance)
-        return nearby_coaching[skip : skip + limit]
-        
-    # Standard pagination
-    return query.offset(skip).limit(limit).all()
+    from fastapi.encoders import jsonable_encoder
+    json_data = jsonable_encoder(final_results)
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(json_data))
+    except Exception as e:
+        logger.error(f"Cache failed: {e}")
+
+    return final_results
+
+# ------------------- FILTERS ALIAS -------------------
+@router.get("/filters", response_model=List[CoachingResponse])
+async def get_coaching_filtered(
+    filters: CoachingFilterParams = Depends(),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Alias for the main Coaching search endpoint.
+    """
+    return await get_coaching_classes(filters, db, current_user)
 
 # ------------------- GET ONE -------------------
 @router.get("/{coaching_id}", response_model=CoachingResponse)
+@cache(expire=60)
 async def get_coaching_class(
     coaching_id: int,
     db: Session = Depends(get_db),

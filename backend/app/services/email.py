@@ -57,21 +57,20 @@ def send_verification_email(email: str, token: str):
     """
     return send_email(email, subject, body, is_html=True)
 
-def send_password_reset_email(email: str, token: str):
+def send_password_reset_email(email: str, code: str):
     """
-    Sends password reset link.
+    Sends password reset verification code.
     """
-    frontend_url = settings.SSO_FRONTEND_SUCCESS_URL or "http://localhost:2001"
-    reset_link = f"{frontend_url}/reset-password?token={token}"
-    
-    subject = "Reset Your aide Password"
+    subject = "Reset Your Aide Password"
     body = f"""
-    <h2>Password Reset Request</h2>
-    <p>You requested to reset your password. Click the link below to proceed:</p>
-    <a href="{reset_link}" style="padding: 10px 20px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a>
-    <p>Or copy and paste this link in your browser:</p>
-    <p>{reset_link}</p>
-    <p>If you did not request this, please ignore this email.</p>
-    <p>This link will expire in 1 hour.</p>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+        <h2 style="color: #2196F3;">Password Reset Request</h2>
+        <p>You requested to reset your password. Please use the verification code below to proceed:</p>
+        <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; text-align: center; padding: 20px; background-color: #f4f4f4; color: #333; border-radius: 5px;">
+            {code}
+        </div>
+        <p>Enter this code on the password reset page. It will expire in 10 minutes.</p>
+        <p>If you did not request this, please ignore this email.</p>
+    </div>
     """
     return send_email(email, subject, body, is_html=True)

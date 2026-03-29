@@ -10,7 +10,9 @@ from app.models.user import User, UserRole
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-def get_current_user(
+from app.core.redis import is_token_blacklisted
+
+async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ):
@@ -18,6 +20,11 @@ def get_current_user(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
     )
+
+    # Check if token is blacklisted
+    if await is_token_blacklisted(token):
+        logger.warning(f"Attempt to use blacklisted token: {token[:10]}...")
+        raise credentials_exception
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

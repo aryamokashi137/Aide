@@ -21,50 +21,160 @@ router = APIRouter(
     tags=["PGs"]
 )
 
+from app.core.redis import geo_add_location, geo_remove_location, geo_search_nearby
+from sqlalchemy import func, or_
+from enum import Enum
+from fastapi_cache.decorator import cache
+
+class SortBy(str, Enum):
+    DISTANCE = "distance"
+    RATING = "rating"
+    NAME = "name"
+
+class Order(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+from enum import Enum
+from typing import List, Optional
+from pydantic import Field
+from sqlalchemy import func, or_
 from app.core.location import calculate_haversine_distance
+from app.core.redis import geo_search_nearby, redis_client
+import json
+import hashlib
+
+# 1. Enums for type-safe filtering
+# SortBy and Order are already defined above
+
+# 2. Dependency class for clean filters
+class PGFilterParams:
+    def __init__(
+        self,
+        skip: int = Query(0, ge=0),
+        limit: int = Query(10, ge=1, le=100),
+        gender: Optional[GenderType] = Query(None, description="Filter by Gender"),
+        room_type: Optional[RoomType] = Query(None, description="Filter by Room Type"),
+        query: Optional[str] = Query(None, description="Search by PG name, address or description"),
+        lat: Optional[float] = Query(None, ge=-90, le=90),
+        lon: Optional[float] = Query(None, ge=-180, le=180),
+        radius: Optional[float] = Query(20.0, ge=0.5, le=100.0),
+        sort_by: Optional[SortBy] = Query(SortBy.NAME),
+        order: Optional[Order] = Query(Order.ASC)
+    ):
+        self.skip = skip
+        self.limit = limit
+        self.gender = gender
+        self.room_type = room_type
+        self.query = query
+        self.lat = lat
+        self.lon = lon
+        self.radius = radius
+        self.sort_by = sort_by
+        self.order = order
+
+    def get_cache_key(self) -> str:
+        params_dict = {k: str(v) for k, v in self.__dict__.items()}
+        params_str = json.dumps(params_dict, sort_keys=True)
+        return f"pgs_search:{hashlib.md5(params_str.encode()).hexdigest()}"
 
 @router.get("/", response_model=List[PGResponse])
 async def get_pgs(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    name: Optional[str] = Query(None),
-    gender: Optional[str] = Query(None),
-    lat: Optional[float] = Query(None, description="User's current latitude"),
-    lon: Optional[float] = Query(None, description="User's current longitude"),
-    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
+    filters: PGFilterParams = Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
-    Get PGs with optional name/gender filtering and nearby search.
+    Get PGs with advanced dynamic filtering, caching, and geo-proximity sorting.
     """
-    query = db.query(PG).filter(PG.is_active == True)
-    if name:
-        query = query.filter(PG.name.ilike(f"%{name}%"))
-    if gender:
-        query = query.filter(PG.gender == gender)
+    # 1. Cache lookup
+    cache_key = filters.get_cache_key()
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"Cache miss error: {e}")
+
+    # 2. Build Base Query
+    query = db.query(
+        PG, 
+        func.avg(Review.rating).label("avg_rating")
+    ).outerjoin(Review, Review.pg_id == PG.id)\
+     .filter(PG.is_active == True)\
+     .group_by(PG.id)
+
+    # 3. Dynamic Filters
+    if filters.gender:
+        query = query.filter(PG.gender == filters.gender)
+    if filters.room_type:
+        query = query.filter(PG.room_type == filters.room_type)
+    if filters.query:
+        search = f"%{filters.query}%"
+        query = query.filter(or_(
+            PG.name.ilike(search), 
+            PG.address.ilike(search),
+            PG.description.ilike(search),
+            PG.facilities_available.ilike(search)
+        ))
+
+    # 4. Geo-spatial Logic
+    pgs_list = []
+    use_geo = all(v is not None for v in [filters.lat, filters.lon])
     
-    # Execute query
-    pgs = query.all()
+    if use_geo:
+        nearby_results = await geo_search_nearby("geo:pgs", filters.lon, filters.lat, filters.radius)
+        nearby_ids = [res["id"] for res in nearby_results]
+        dist_map = {res["id"]: res["dist"] for res in nearby_results}
+        
+        query = query.filter(PG.id.in_(nearby_ids))
+        results = query.all()
+        for pg, avg_rating in results:
+            pg.distance = dist_map.get(pg.id)
+            pg.rating = float(avg_rating) if avg_rating else 0.0
+            pgs_list.append(pg)
+    else:
+        results = query.all()
+        for pg, avg_rating in results:
+            pg.rating = float(avg_rating) if avg_rating else 0.0
+            pg.distance = None
+            pgs_list.append(pg)
+
+    # 5. Sorting
+    is_desc = (filters.order == Order.DESC)
+    if filters.sort_by == SortBy.DISTANCE and use_geo:
+        pgs_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
+    elif filters.sort_by == SortBy.RATING:
+        pgs_list.sort(key=lambda x: x.rating, reverse=is_desc)
+    elif filters.sort_by == SortBy.NAME:
+        pgs_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
+
+    # 6. Pagination & Caching
+    final_results = pgs_list[filters.skip : filters.skip + filters.limit]
     
-    # Logic for nearby search
-    if lat is not None and lon is not None:
-        nearby_pgs = []
-        for pg in pgs:
-            if pg.latitude and pg.longitude:
-                dist = calculate_haversine_distance(lat, lon, pg.latitude, pg.longitude)
-                pg.distance = round(dist, 2)
-                
-                if radius is None or dist <= radius:
-                    nearby_pgs.append(pg)
-        
-        nearby_pgs.sort(key=lambda x: x.distance)
-        return nearby_pgs[skip : skip + limit]
-        
-    # Standard pagination
-    return query.offset(skip).limit(limit).all()
+    from fastapi.encoders import jsonable_encoder
+    json_data = jsonable_encoder(final_results)
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(json_data))
+    except Exception as e:
+        logger.error(f"Cache failed: {e}")
+
+    return final_results
+
+# ------------------- FILTERS ALIAS -------------------
+@router.get("/filters", response_model=List[PGResponse])
+async def get_pgs_filtered(
+    filters: PGFilterParams = Depends(),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Alias for the main PGs search endpoint.
+    """
+    return await get_pgs(filters, db, current_user)
 
 @router.get("/{pg_id}", response_model=PGResponse)
+@cache(expire=60)
 async def get_pg(
     pg_id: int,
     db: Session = Depends(get_db),
@@ -109,6 +219,11 @@ async def create_pg(
     db.add(pg)
     db.commit()
     db.refresh(pg)
+    
+    # Sync with Redis Geo
+    if pg.latitude and pg.longitude:
+        await geo_add_location("geo:pgs", pg.longitude, pg.latitude, pg.id)
+        
     logger.info(f"PG created successfully: {pg.name} by user {current_user.id}")
     return pg
 
@@ -153,6 +268,13 @@ async def update_pg(
 
     db.commit()
     db.refresh(pg)
+    
+    # Sync with Redis Geo
+    if pg.latitude and pg.longitude:
+        await geo_add_location("geo:pgs", pg.longitude, pg.latitude, pg.id)
+    else:
+        await geo_remove_location("geo:pgs", pg.id)
+        
     logger.info(f"PG updated successfully: {pg.name} by user {current_user.id}")
     return pg
 
@@ -169,8 +291,9 @@ async def delete_pg(
             detail="PG not found"
         )
     
-    pg.is_active = False
-    db.commit()
+    # Remove from Redis Geo Index
+    await geo_remove_location("geo:pgs", pg_id)
+    
     logger.info(f"PG deleted successfully: {pg.id} by user {current_user.id}")
     return None
 

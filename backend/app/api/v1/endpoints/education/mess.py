@@ -15,55 +15,148 @@ from app.schemas.education.mess import (
 )
 from app.api.v1.endpoints.deps import get_current_user, require_roles
 from fastapi.encoders import jsonable_encoder
+from enum import Enum
+from fastapi_cache.decorator import cache
 
-router = APIRouter(
-    prefix="/mess",
-    tags=["Mess"]
-)
+router = APIRouter(prefix="/mess", tags=["Mess"])
 
+from pydantic import Field
+from sqlalchemy import func, or_
 from app.core.location import calculate_haversine_distance
+from app.core.redis import geo_search_nearby, redis_client
+import json
+import hashlib
 
-# ------------------- GET ALL -------------------
+# 1. Enums for type-safe filtering
+class SortBy(str, Enum):
+    DISTANCE = "distance"
+    RATING = "rating"
+    NAME = "name"
+
+class Order(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+# 2. Dependency class for clean filters
+class MessFilterParams:
+    def __init__(
+        self,
+        skip: int = Query(0, ge=0),
+        limit: int = Query(10, ge=1, le=100),
+        meal_type: Optional[MessType] = Query(None, description="Filter by Meal Type"),
+        query: Optional[str] = Query(None, description="Search by name or address"),
+        lat: Optional[float] = Query(None, ge=-90, le=90),
+        lon: Optional[float] = Query(None, ge=-180, le=180),
+        radius: Optional[float] = Query(10.0, ge=0.5, le=100.0),
+        sort_by: Optional[SortBy] = Query(SortBy.NAME),
+        order: Optional[Order] = Query(Order.ASC)
+    ):
+        self.skip = skip
+        self.limit = limit
+        self.meal_type = meal_type
+        self.query = query
+        self.lat = lat
+        self.lon = lon
+        self.radius = radius
+        self.sort_by = sort_by
+        self.order = order
+
+    def get_cache_key(self) -> str:
+        params_dict = {k: str(v) for k, v in self.__dict__.items()}
+        params_str = json.dumps(params_dict, sort_keys=True)
+        return f"mess_search:{hashlib.md5(params_str.encode()).hexdigest()}"
+
 @router.get("/", response_model=List[MessResponse])
 async def get_mess_list(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    name: Optional[str] = Query(None),
-    lat: Optional[float] = Query(None, description="User's current latitude"),
-    lon: Optional[float] = Query(None, description="User's current longitude"),
-    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
+    filters: MessFilterParams = Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
-    Get mess list with optional name filtering and nearby search.
+    Get mess list with advanced dynamic filtering, caching, and geo-proximity sorting.
     """
-    query = db.query(Mess).filter(Mess.is_active == True)
-    if name:
-        query = query.filter(Mess.name.ilike(f"%{name}%"))
+    # 1. Cache lookup
+    cache_key = filters.get_cache_key()
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"Cache miss error: {e}")
+
+    # 2. Build Base Query
+    query = db.query(
+        Mess, 
+        func.avg(Review.rating).label("avg_rating")
+    ).outerjoin(Review, Review.mess_id == Mess.id)\
+     .filter(Mess.is_active == True)\
+     .group_by(Mess.id)
+
+    # 3. Dynamic Filters
+    if filters.meal_type:
+        query = query.filter(Mess.meal_types == filters.meal_type)
+    if filters.query:
+        search = f"%{filters.query}%"
+        query = query.filter(or_(Mess.name.ilike(search), Mess.address.ilike(search)))
+
+    # 4. Geo-spatial Logic
+    mess_data_list = []
+    use_geo = all(v is not None for v in [filters.lat, filters.lon])
     
-    # Execute query
-    mess_list = query.all()
+    if use_geo:
+        nearby_results = await geo_search_nearby("geo:mess", filters.lon, filters.lat, filters.radius)
+        nearby_ids = [res["id"] for res in nearby_results]
+        dist_map = {res["id"]: res["dist"] for res in nearby_results}
+        
+        query = query.filter(Mess.id.in_(nearby_ids))
+        results = query.all()
+        for mess, avg_rating in results:
+            mess.distance = dist_map.get(mess.id)
+            mess.rating = float(avg_rating) if avg_rating else 0.0
+            mess_data_list.append(mess)
+    else:
+        results = query.all()
+        for mess, avg_rating in results:
+            mess.rating = float(avg_rating) if avg_rating else 0.0
+            mess.distance = None
+            mess_data_list.append(mess)
+
+    # 5. Sorting
+    is_desc = (filters.order == Order.DESC)
+    if filters.sort_by == SortBy.DISTANCE and use_geo:
+        mess_data_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
+    elif filters.sort_by == SortBy.RATING:
+        mess_data_list.sort(key=lambda x: x.rating, reverse=is_desc)
+    elif filters.sort_by == SortBy.NAME:
+        mess_data_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
+
+    # 6. Pagination & Caching
+    final_results = mess_data_list[filters.skip : filters.skip + filters.limit]
     
-    # Logic for nearby search
-    if lat is not None and lon is not None:
-        nearby_mess = []
-        for mess in mess_list:
-            if mess.latitude and mess.longitude:
-                dist = calculate_haversine_distance(lat, lon, mess.latitude, mess.longitude)
-                mess.distance = round(dist, 2)
-                
-                if radius is None or dist <= radius:
-                    nearby_mess.append(mess)
-        
-        nearby_mess.sort(key=lambda x: x.distance)
-        return nearby_mess[skip : skip + limit]
-        
-    # Standard pagination
-    return query.offset(skip).limit(limit).all()
+    from fastapi.encoders import jsonable_encoder
+    json_data = jsonable_encoder(final_results)
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(json_data))
+    except Exception as e:
+        logger.error(f"Cache failed: {e}")
+
+    return final_results
+
+# ------------------- FILTERS ALIAS -------------------
+@router.get("/filters", response_model=List[MessResponse])
+async def get_mess_filtered(
+    filters: MessFilterParams = Depends(),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Alias for the main Mess search endpoint.
+    """
+    return await get_mess(filters, db, current_user)
 
 # ------------------- GET ONE -------------------
 @router.get("/{mess_id}", response_model=MessResponse)
+@cache(expire=60)
 async def get_mess(
     mess_id: int,
     db: Session = Depends(get_db),

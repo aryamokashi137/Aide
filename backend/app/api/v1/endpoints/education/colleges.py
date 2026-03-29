@@ -13,58 +13,178 @@ from app.schemas.education.colleges import (
     CollegeUpdate,
     CollegeResponse
 )
+from sqlalchemy import func, or_
+from app.models.education.review import Review
 from app.api.v1.endpoints.deps import get_current_user, require_roles
 
+router = APIRouter(prefix="/colleges", tags=["Colleges"])
 
-router = APIRouter(
-    prefix="/colleges",
-    tags=["Colleges"]
-)
-
+from enum import Enum
+from typing import List, Optional
+from pydantic import Field, field_validator
+from sqlalchemy import func, or_
 from app.core.location import calculate_haversine_distance
+from fastapi_cache.decorator import cache
+from app.core.redis import geo_add_location, geo_remove_location, geo_search_nearby, redis_client
+import json
+import hashlib
+
+# 1. Enums for type-safe filtering and Swagger dropdowns
+class SortBy(str, Enum):
+    DISTANCE = "distance"
+    RATING = "rating"
+    NAME = "name"
+    ESTABLISHED = "established"
+
+class Order(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+# 2. Dependency class for clean, validated query parameters
+class CollegeFilterParams:
+    def __init__(
+        self,
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(10, ge=1, le=100, description="Max records to return (capped at 100)"),
+        type: Optional[CollegeType] = Query(None, description="Filter by College Type (e.g. Government, Private)"),
+        query: Optional[str] = Query(None, description="Search by name, description, or courses"),
+        lat: Optional[float] = Query(None, ge=-90, le=90, description="User's latitude for distance calculation"),
+        lon: Optional[float] = Query(None, ge=-180, le=180, description="User's longitude for distance calculation"),
+        radius: Optional[float] = Query(10.0, ge=0.5, le=100.0, description="Search radius in km (max 100km)"),
+        sort_by: Optional[SortBy] = Query(SortBy.NAME, description="Field to sort by"),
+        order: Optional[Order] = Query(Order.ASC, description="Sort order (asc/desc)")
+    ):
+        self.skip = skip
+        self.limit = limit
+        self.type = type
+        self.query = query
+        self.lat = lat
+        self.lon = lon
+        self.radius = radius
+        self.sort_by = sort_by
+        self.order = order
+
+    def get_cache_key(self) -> str:
+        """Generate a unique cache key based on filter parameters."""
+        params_dict = {k: str(v) for k, v in self.__dict__.items()}
+        params_str = json.dumps(params_dict, sort_keys=True)
+        return f"colleges_search:{hashlib.md5(params_str.encode()).hexdigest()}"
 
 @router.get("/", response_model=List[CollegeResponse])
 async def get_colleges(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    name: Optional[str] = Query(None),
-    type: Optional[str] = Query(None),
-    lat: Optional[float] = Query(None, description="User's current latitude"),
-    lon: Optional[float] = Query(None, description="User's current longitude"),
-    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1),
+    filters: CollegeFilterParams = Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
-    Get colleges with optional name/type filtering and nearby search.
+    Get a paginated list of colleges with dynamic filtering and sorting.
+    Supports:
+    - Text search (name, description, etc.)
+    - Category/Type filtering
+    - Geo-spatial proximity search (if lat/lon/radius provided)
+    - Sorting by name, rating, or distance
     """
-    query = db.query(College).filter(College.is_active == True)
-    if name:
-        query = query.filter(College.name.ilike(f"%{name}%"))
-    if type:
-        query = query.filter(College.type.ilike(f"%{type}%"))
     
-    # Execute query
-    colleges = query.all()
+    # 1. Check Redis Cache
+    cache_key = filters.get_cache_key()
+    try:
+        cached_data = await redis_client.get(cache_key)
+        if cached_data:
+            logger.info(f"Returning cached results for {cache_key}")
+            return json.loads(cached_data)
+    except Exception as e:
+        logger.warning(f"Redis cache error: {e}")
+
+    # 2. Build Base Query (including average rating)
+    query = db.query(
+        College, 
+        func.avg(Review.rating).label("avg_rating")
+    ).outerjoin(Review, Review.college_id == College.id)\
+     .filter(College.is_active == True)\
+     .group_by(College.id)
+
+    # 3. Apply Dynamic Filters
+    if filters.type:
+        query = query.filter(College.type == filters.type)
     
-    # Logic for nearby search
-    if lat is not None and lon is not None:
-        nearby_colleges = []
-        for college in colleges:
-            if college.latitude and college.longitude:
-                dist = calculate_haversine_distance(lat, lon, college.latitude, college.longitude)
-                college.distance = round(dist, 2)
-                
-                if radius is None or dist <= radius:
-                    nearby_colleges.append(college)
+    if filters.query:
+        search_term = f"%{filters.query}%"
+        query = query.filter(
+            or_(
+                College.name.ilike(search_term),
+                College.description.ilike(search_term),
+                College.streams_available.ilike(search_term)
+            )
+        )
+
+    # 4. Handle Geo-spatial logic (Hybrid: Redis + SQL)
+    colleges_list = []
+    use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    
+    if use_geo:
+        # Use Redis for high-performance proximity finding
+        nearby_results = await geo_search_nearby("geo:colleges", filters.lon, filters.lat, filters.radius)
+        nearby_ids = [res["id"] for res in nearby_results]
+        dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        nearby_colleges.sort(key=lambda x: x.distance)
-        return nearby_colleges[skip : skip + limit]
+        # Filter DB query to only include nearby colleges
+        query = query.filter(College.id.in_(nearby_ids))
         
-    # Standard pagination
-    return query.offset(skip).limit(limit).all()
+        # Execute query
+        results = query.all()
+        for college, avg_rating in results:
+            college.distance = dist_map.get(college.id)
+            college.rating = float(avg_rating) if avg_rating else 0.0
+            colleges_list.append(college)
+    else:
+        # Standard DB fetch
+        results = query.all()
+        for college, avg_rating in results:
+            college.rating = float(avg_rating) if avg_rating else 0.0
+            college.distance = None
+            colleges_list.append(college)
+
+    # 5. Apply Sorting
+    is_desc = (filters.order == Order.DESC)
+    
+    if filters.sort_by == SortBy.DISTANCE and use_geo:
+        colleges_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
+    elif filters.sort_by == SortBy.RATING:
+        colleges_list.sort(key=lambda x: x.rating, reverse=is_desc)
+    elif filters.sort_by == SortBy.NAME:
+        colleges_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
+    elif filters.sort_by == SortBy.ESTABLISHED:
+        colleges_list.sort(key=lambda x: x.established_year if x.established_year else 0, reverse=is_desc)
+
+    # 6. Pagination & JSON response
+    final_results = colleges_list[filters.skip : filters.skip + filters.limit]
+    
+    # Simple conversion to dict for caching
+    from fastapi.encoders import jsonable_encoder
+    json_results = jsonable_encoder(final_results)
+    
+    # 7. Background: Save to Cache
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(json_results)) # Cache for 5 mins
+    except Exception as e:
+        logger.error(f"Failed to cache data: {e}")
+
+    return final_results
+
+# ------------------- FILTERS ALIAS -------------------
+@router.get("/filters", response_model=List[CollegeResponse])
+async def get_colleges_filtered(
+    filters: CollegeFilterParams = Depends(),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Alias for the main colleges search endpoint.
+    """
+    return await get_colleges(filters, db, current_user)
 
 @router.get("/{college_id}", response_model=CollegeResponse)
+@cache(expire=60)
 async def get_college(
     college_id: int,
     db: Session = Depends(get_db),
@@ -194,6 +314,9 @@ async def delete_college(
     # Soft delete
     college.is_active = False
     db.commit()
+    
+    # Remove from Redis Geo Index
+    await geo_remove_location("geo:colleges", college_id)
 
     return None
 

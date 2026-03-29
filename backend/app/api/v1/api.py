@@ -13,6 +13,7 @@ from app.api.v1.endpoints import notification
 from app.api.v1.endpoints.medical import hospitals, doctors, blood_banks, ambulances
 
 
+
 api_router = APIRouter()
 
 api_router.include_router(
