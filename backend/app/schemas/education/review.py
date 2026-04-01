@@ -15,6 +15,7 @@ class ReviewCreate(ReviewBase):
 class ReviewResponse(ReviewBase):
     id: int
     user_id: int
+    user_name: str
     entity_type: str
     entity_id: int
     is_active: bool

@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, File, UploadFile
+import shutil
+import uuid
+import os
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -57,6 +60,12 @@ async def create_my_profile(
         # Notification settings
         if profile_data.push_notifications is not None:
             current_user.push_notifications = profile_data.push_notifications
+        if profile_data.location_access is not None:
+            current_user.location_access = profile_data.location_access
+        if profile_data.dark_mode is not None:
+            current_user.dark_mode = profile_data.dark_mode
+        if profile_data.preferred_language is not None:
+            current_user.preferred_language = profile_data.preferred_language
 
         db.commit()
         db.refresh(current_user)
@@ -110,6 +119,12 @@ async def update_my_profile(
         # Notification settings
         if update_data.push_notifications is not None:
             current_user.push_notifications = update_data.push_notifications
+        if update_data.location_access is not None:
+            current_user.location_access = update_data.location_access
+        if update_data.dark_mode is not None:
+            current_user.dark_mode = update_data.dark_mode
+        if update_data.preferred_language is not None:
+            current_user.preferred_language = update_data.preferred_language
 
         db.commit()
         db.refresh(current_user)
@@ -124,3 +139,36 @@ async def update_my_profile(
         db.rollback()
         logger.error(f"DB error updating profile: {e}")
         raise
+
+@router.post("/upload-profile-image", response_model=UserResponse)
+async def upload_profile_image(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload and update the current user's profile image.
+    """
+    # Ensure directory exists
+    upload_dir = "static/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Generate unique filename
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join(upload_dir, unique_filename)
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update DB URL
+    # Assuming backend runs on localhost:8000
+    # In production, use the actual domain from config
+    image_url = f"/static/uploads/{unique_filename}"
+    current_user.profile_image = image_url
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    return UserResponse.model_validate(current_user)

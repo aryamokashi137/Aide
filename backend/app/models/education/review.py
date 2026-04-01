@@ -98,3 +98,6 @@ class Review(Base):
     @property
     def entity_id(self) -> int:
         return self.college_id or self.school_id or self.hostel_id or self.mess_id or self.coaching_id or self.pg_id or 0
+    @property
+    def user_name(self) -> str:
+        return self.user.full_name if self.user else "Anonymous Student"

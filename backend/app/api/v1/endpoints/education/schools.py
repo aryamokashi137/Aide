@@ -103,27 +103,20 @@ async def get_schools(
         search = f"%{filters.query}%"
         query = query.filter(or_(School.name.ilike(search), School.address.ilike(search)))
 
-    # 4. Geo-spatial Logic
+    # 4. Geo-spatial Logic (Inclusive Search)
     schools_list = []
     use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    dist_map = {}
     
     if use_geo:
         nearby_results = await geo_search_nearby("geo:schools", filters.lon, filters.lat, filters.radius)
-        nearby_ids = [res["id"] for res in nearby_results]
         dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        query = query.filter(School.id.in_(nearby_ids))
-        results = query.all()
-        for school, avg_rating in results:
-            school.distance = dist_map.get(school.id)
-            school.rating = float(avg_rating) if avg_rating else 0.0
-            schools_list.append(school)
-    else:
-        results = query.all()
-        for school, avg_rating in results:
-            school.rating = float(avg_rating) if avg_rating else 0.0
-            school.distance = None
-            schools_list.append(school)
+    results = query.all()
+    for school, avg_rating in results:
+        school.rating = float(avg_rating) if avg_rating else 0.0
+        school.distance = dist_map.get(school.id)
+        schools_list.append(school)
 
     # 5. Sorting
     is_desc = (filters.order == Order.DESC)

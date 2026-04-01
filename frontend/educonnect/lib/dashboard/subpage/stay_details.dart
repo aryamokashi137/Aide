@@ -1,28 +1,53 @@
+import 'package:educonnect/models/pg.dart';
+import 'package:educonnect/models/review.dart';
+import 'package:educonnect/services/api_service.dart';
+import 'package:educonnect/widgets/review_dialog.dart';
+import 'package:educonnect/widgets/scheduling_dialog.dart';
 import 'package:flutter/material.dart';
 
-class PGDetailsPage extends StatelessWidget {
-  const PGDetailsPage({super.key});
+class PGDetailsPage extends StatefulWidget {
+  final PG pg;
+  const PGDetailsPage({super.key, required this.pg});
 
-  Widget sectionTitle(String title) {
+  @override
+  State<PGDetailsPage> createState() => _PGDetailsPageState();
+}
+
+class _PGDetailsPageState extends State<PGDetailsPage> {
+  final ApiService _apiService = ApiService();
+  late Future<List<Review>> _reviewsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshReviews();
+  }
+
+  void _refreshReviews() {
+    setState(() {
+      _reviewsFuture = _apiService.getReviews('pg', widget.pg.id);
+    });
+  }
+
+  Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 12),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 17,
-          fontWeight: FontWeight.bold,
-        ),
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
       ),
     );
   }
 
-  Widget infoCard({required Widget child}) {
+  Widget _infoCard({required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade100),
       ),
       child: child,
     );
@@ -30,402 +55,205 @@ class PGDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: Colors.white,
-
-        /// Schedule Visit Button
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         bottomNavigationBar: Padding(
           padding: const EdgeInsets.all(16),
           child: ElevatedButton.icon(
             icon: const Icon(Icons.calendar_month),
             label: const Text("Schedule Visit"),
             style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            backgroundColor: Colors.purple,
-            foregroundColor: Colors.white, // icon + text color
-            textStyle: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
             onPressed: () async {
-
-              /// Select Date
-              DateTime? selectedDate = await showDatePicker(
-                context: context,
-                initialDate: DateTime.now(),
-                firstDate: DateTime.now(),
-                lastDate: DateTime(2030),
+              final res = await showDialog<Map<String, dynamic>>(
+                context: context, 
+                builder: (_) => SchedulingDialog(entityName: widget.pg.name)
               );
 
-              if (selectedDate == null) return;
-
-              /// Select Time
-              TimeOfDay? selectedTime = await showTimePicker(
-                context: context,
-                initialTime: TimeOfDay.now(),
-              );
-
-              if (selectedTime == null) return;
-
-              /// Confirmation Popup
-              showDialog(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    title: const Text("Visit Scheduled"),
-                    content: Text(
-                      "Your visit is scheduled on\n"
-                      "${selectedDate.day}/${selectedDate.month}/${selectedDate.year}"
-                      " at ${selectedTime.format(context)}",
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text("OK"),
-                      )
-                    ],
+              if (res != null) {
+                try {
+                  await _apiService.scheduleVisit(
+                    entityType: 'pg',
+                    entityId: widget.pg.id,
+                    entityName: widget.pg.name,
+                    visitDate: res['date'],
+                    preferredTime: res['time'],
+                    message: res['message'],
                   );
-                },
-              );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Visit scheduled! Check your profile for details."), backgroundColor: Colors.green)
+                    );
+                  }
+                } catch (e) {
+                   if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Failed to schedule: $e"), backgroundColor: Colors.redAccent)
+                    );
+                  }
+                }
+              }
             },
           ),
         ),
-
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: Colors.white,
-          iconTheme: const IconThemeData(color: Colors.black),
-          title: const Text(
-            "PG Details",
-            style: TextStyle(color: Colors.black),
-          ),
+          backgroundColor: Colors.transparent,
+          foregroundColor: isDark ? Colors.white : Colors.black,
+          title: const Text("PG Details", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
-
-        body: Column(
-          children: [
-
-            Expanded(
-              child: SingleChildScrollView(
+        body: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Image.network(
+                widget.pg.image ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2",
+                height: 250, width: double.infinity, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(height: 250, color: Colors.grey),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
-                    /// Image
-                    Image.network(
-                      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2",
-                      height: 250,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
+                    Text(widget.pg.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.star, color: Colors.orange, size: 18),
+                        Text("${widget.pg.rating}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
                     ),
-
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 20),
+                    const TabBar(
+                      labelColor: Colors.purple,
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Colors.purple,
+                      tabs: [Tab(text: "Overview"), Tab(text: "Amenities"), Tab(text: "Reviews")],
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      height: 500,
+                      child: TabBarView(
                         children: [
-
-                          const Text(
-                            "Comfort Living PG",
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
-
-                          Row(
-                            children: const [
-                              Icon(Icons.star,
-                                  color: Colors.orange, size: 18),
-                              SizedBox(width: 4),
-                              Text("4.5"),
-                              SizedBox(width: 6),
-                              Text("(78 reviews)",
-                                  style: TextStyle(color: Colors.grey)),
-                            ],
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          Row(
-                            children: const [
-                              Icon(Icons.location_on_outlined,
-                                  size: 16, color: Colors.grey),
-                              SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  "45 HSR Layout, Sector 2, Bangalore",
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          /// Pricing
-                          const Text(
-                            "Pricing",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade50,
-                                  borderRadius:
-                                      BorderRadius.circular(12),
-                                ),
-                                child: const Column(
-                                  children: [
-                                    Icon(Icons.currency_rupee),
-                                    SizedBox(height: 6),
-                                    Text("₹8,500 / Month"),
-                                  ],
-                                ),
-                              ),
-
-                              Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius:
-                                      BorderRadius.circular(12),
-                                ),
-                                child: const Column(
-                                  children: [
-                                    Icon(Icons.home),
-                                    SizedBox(height: 6),
-                                    Text("Deposit ₹10,000"),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 25),
-
-                          /// Tabs
-                          const TabBar(
-                            labelColor: Colors.black,
-                            indicatorColor: Colors.purple,
-                            tabs: [
-                              Tab(text: "Overview"),
-                              Tab(text: "Amenities"),
-                              Tab(text: "Reviews"),
-                            ],
-                          ),
-
-                          const SizedBox(height: 15),
-
-                          SizedBox(
-                            height: 420,
-                            child: TabBarView(
-                              children: [
-
-                                /// OVERVIEW TAB
-                                SingleChildScrollView(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-
-                                      sectionTitle("Description"),
-                                      infoCard(
-                                        child: const Text(
-                                          "Comfort Living PG offers clean rooms, healthy food, high-speed WiFi and a peaceful environment. Perfect for students and working professionals.",
-                                        ),
-                                      ),
-
-                                      sectionTitle("House Rules"),
-                                      infoCard(
-                                        child: Column(
-                                          children: const [
-                                            ListTile(
-                                              leading: Icon(Icons.access_time),
-                                              title: Text(
-                                                  "Gate closes at 11 PM"),
-                                            ),
-                                            ListTile(
-                                              leading:
-                                                  Icon(Icons.smoke_free),
-                                              title: Text(
-                                                  "No smoking inside rooms"),
-                                            ),
-                                            ListTile(
-                                              leading: Icon(Icons.people),
-                                              title: Text(
-                                                  "No outside guests allowed"),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-
-                                      sectionTitle("Nearby Places"),
-                                      infoCard(
-                                        child: Column(
-                                          children: const [
-                                            ListTile(
-                                              leading:
-                                                  Icon(Icons.business),
-                                              title: Text(
-                                                  "Tech Park - 1 km"),
-                                            ),
-                                            ListTile(
-                                              leading: Icon(
-                                                  Icons.restaurant),
-                                              title: Text(
-                                                  "Food Street - 500 m"),
-                                            ),
-                                            ListTile(
-                                              leading: Icon(Icons
-                                                  .local_hospital),
-                                              title: Text(
-                                                  "Hospital - 800 m"),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-
-                                      sectionTitle("Owner Contact"),
-                                      infoCard(
-                                        child: Column(
-                                          children: const [
-                                            ListTile(
-                                              leading:
-                                                  Icon(Icons.person),
-                                              title:
-                                                  Text("Mr. Ramesh"),
-                                            ),
-                                            ListTile(
-                                              leading:
-                                                  Icon(Icons.phone),
-                                              title: Text(
-                                                  "+91 9876543210"),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                /// AMENITIES TAB
-                                SingleChildScrollView(
-                                  child: Column(
-                                    children: const [
-
-                                      ListTile(
-                                        leading: Icon(Icons.wifi,
-                                            color: Colors.blue),
-                                        title: Text("High Speed WiFi"),
-                                      ),
-                                      Divider(),
-
-                                      ListTile(
-                                        leading: Icon(
-                                            Icons.restaurant,
-                                            color: Colors.orange),
-                                        title:
-                                            Text("Daily Meals Included"),
-                                      ),
-                                      Divider(),
-
-                                      ListTile(
-                                        leading: Icon(
-                                            Icons
-                                                .local_laundry_service,
-                                            color: Colors.purple),
-                                        title:
-                                            Text("Laundry Service"),
-                                      ),
-                                      Divider(),
-
-                                      ListTile(
-                                        leading: Icon(
-                                            Icons.local_parking,
-                                            color: Colors.green),
-                                        title:
-                                            Text("Parking Facility"),
-                                      ),
-                                      Divider(),
-
-                                      ListTile(
-                                        leading: Icon(Icons.security,
-                                            color: Colors.red),
-                                        title: Text("24x7 Security"),
-                                      ),
-                                      Divider(),
-
-                                      ListTile(
-                                        leading: Icon(
-                                            Icons.cleaning_services,
-                                            color: Colors.teal),
-                                        title:
-                                            Text("Housekeeping"),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                /// REVIEWS TAB
-                                Column(
-                                  children: const [
-
-                                    ListTile(
-                                      leading: CircleAvatar(
-                                        child: Text("A"),
-                                      ),
-                                      title: Text("Akash"),
-                                      subtitle: Text(
-                                          "Very clean rooms and good food."),
-                                    ),
-
-                                    ListTile(
-                                      leading: CircleAvatar(
-                                        child: Text("R"),
-                                      ),
-                                      title: Text("Rohit"),
-                                      subtitle: Text(
-                                          "Affordable PG near office."),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
+                          _overviewTab(),
+                          _amenitiesTab(),
+                          _reviewsTab(),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
 
+  Widget _overviewTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle("Description"),
+        _infoCard(child: const Text("Perfect for students with focus on safety and comfort.")),
+        _sectionTitle("Pricing"),
+        _infoCard(child: Text("Rent: ₹${widget.pg.rent}/mo", style: const TextStyle(fontWeight: FontWeight.bold))),
+      ],
+    );
+  }
+
+  Widget _amenitiesTab() {
+    return Column(
+      children: const [
+        ListTile(leading: Icon(Icons.wifi, color: Colors.blue), title: Text("Unlimited WiFi")),
+        ListTile(leading: Icon(Icons.security, color: Colors.red), title: Text("CCTV & Security")),
+        ListTile(leading: Icon(Icons.restaurant, color: Colors.orange), title: Text("Hygienic Food")),
+      ],
+    );
+  }
+
+  Widget _reviewsTab() {
+    return Column(
+      children: [
+        ElevatedButton.icon(
+          onPressed: () async {
+            final res = await showDialog<Map<String, dynamic>>(
+              context: context, builder: (_) => ReviewDialog(entityName: widget.pg.name)
+            );
+            if (res != null) {
+              try {
+                await _apiService.postReview('pg', widget.pg.id, res['rating'], res['comment']);
+                _refreshReviews();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Review posted!")));
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+              }
+            }
+          },
+          icon: const Icon(Icons.rate_review),
+          label: const Text("Add Review"),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.withOpacity(0.1), elevation: 0),
+        ),
+        const SizedBox(height: 15),
+        Expanded(
+          child: FutureBuilder<List<Review>>(
+            future: _reviewsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              if (snapshot.hasError) return Text("Error: ${snapshot.error}");
+              if (!snapshot.hasData || snapshot.data!.isEmpty) return const Text("No reviews yet.");
+
+              return ListView.builder(
+                itemCount: snapshot.data!.length,
+                itemBuilder: (context, index) {
+                  final r = snapshot.data![index];
+                  return _reviewItem(r.userName, r.userName[0], Colors.purple, r.rating.toString(), r.content);
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _reviewItem(String name, String ini, Color color, String score, String comment) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(radius: 16, backgroundColor: color, child: Text(ini, style: const TextStyle(color: Colors.white))),
+              const SizedBox(width: 10),
+              Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Spacer(),
+              const Icon(Icons.star, color: Colors.orange, size: 14),
+              Text(score, style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(comment, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}

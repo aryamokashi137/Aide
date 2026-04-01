@@ -32,6 +32,9 @@ class User(Base):
 
     # Notification & Permission Settings
     push_notifications = Column(Boolean, nullable=False, default=True)
+    location_access = Column(Boolean, nullable=False, default=True)
+    dark_mode = Column(Boolean, nullable=False, default=False)
+    preferred_language = Column(String(50), nullable=False, default="English")
 
     hashed_password = Column(String(255), nullable=False)
 
@@ -61,4 +64,10 @@ class User(Base):
         "MedicalReview",
         back_populates="user",
         cascade="all, delete-orphan"
-    )
+    )
+
+    visits = relationship(
+        "Visit",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )

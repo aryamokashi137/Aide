@@ -99,27 +99,20 @@ async def get_mess_list(
         search = f"%{filters.query}%"
         query = query.filter(or_(Mess.name.ilike(search), Mess.address.ilike(search)))
 
-    # 4. Geo-spatial Logic
+    # 4. Geo-spatial Logic (Inclusive Search)
     mess_data_list = []
     use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    dist_map = {}
     
     if use_geo:
         nearby_results = await geo_search_nearby("geo:mess", filters.lon, filters.lat, filters.radius)
-        nearby_ids = [res["id"] for res in nearby_results]
         dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        query = query.filter(Mess.id.in_(nearby_ids))
-        results = query.all()
-        for mess, avg_rating in results:
-            mess.distance = dist_map.get(mess.id)
-            mess.rating = float(avg_rating) if avg_rating else 0.0
-            mess_data_list.append(mess)
-    else:
-        results = query.all()
-        for mess, avg_rating in results:
-            mess.rating = float(avg_rating) if avg_rating else 0.0
-            mess.distance = None
-            mess_data_list.append(mess)
+    results = query.all()
+    for mess, avg_rating in results:
+        mess.rating = float(avg_rating) if avg_rating else 0.0
+        mess.distance = dist_map.get(mess.id)
+        mess_data_list.append(mess)
 
     # 5. Sorting
     is_desc = (filters.order == Order.DESC)

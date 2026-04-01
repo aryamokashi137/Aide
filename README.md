@@ -2,103 +2,85 @@
 
 **Aide** (formerly EduCare Connect) is a modern, high-performance platform designed to bridge the gap between students, parents, and essential local services. It provides a unified ecosystem for education, accommodation, and medical support, enhanced by real-time location-based searching and intelligent caching.
 
-This repository contains the **FastAPI-based Backend** that powers the **Aide Flutter Mobile Application**.
+This repository contains the **FastAPI-powered Backend** and the **Flutter-based Cross-Platform Application**.
 
 ---
 
-## 🛠️ Technical Stack
+## 🛠️ Technology Stack
 
-*   **Backend Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+)
-*   **Database**: [PostgreSQL](https://www.postgresql.org/) (Relational Data Storage)
-*   **ORM**: [SQLAlchemy](https://www.sqlalchemy.org/) with [Alembic](https://alembic.sqlalchemy.org/) for migrations.
-*   **In-Memory Database**: [Redis](https://redis.io/) (Used for Caching, Geo-Spatial Indexing, and Rate Limiting).
-*   **Validation**: [Pydantic v2](https://docs.pydantic.dev/) for strict type safety and automatic Swagger documentation.
-*   **Security**: [OAuth2 with JWT tokens](https://jwt.io/), Passlib (bcrypt) for secure password hashing.
-*   **Real-time**: [WebSockets](https://fastapi.tiangolo.com/advanced/websockets/) via Redis Pub/Sub.
-*   **Task/Extensions**: [FastAPI-Limiter](https://github.com/long2ice/fastapi-limiter), [FastAPI-Cache](https://github.com/long2ice/fastapi-cache).
+### Backend
+*   **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+)
+*   **Database**: [PostgreSQL](https://www.postgresql.org/) (Relational Storage)
+*   **Caching & Geo-Spatial**: [Redis](https://redis.io/) (GEOADD, MD5 Query Caching)
+*   **ORM**: [SQLAlchemy](https://www.sqlalchemy.org/) & [Alembic](https://alembic.sqlalchemy.org/)
+
+### Frontend (Flutter)
+*   **Framework**: [Flutter SDK](https://flutter.dev/) (Cross-platform)
+*   **State Management**: [Provider](https://pub.dev/packages/provider)
+*   **Geolocation**: [Geolocator](https://pub.dev/packages/geolocator)
+*   **Networking**: [http](https://pub.dev/packages/http)
+*   **Styling**: Premium Dark Mode with Outlined Iconography
 
 ---
 
 ## 🚀 Key Features
 
-### 🔍 1. Standardized API Filtering
-- **Enum-Validated Parameters**: All categories (e.g., `specialization`, `meal_type`, `board`) use Python Enums for strict validation and interactive dropdowns in Swagger.
-*   **Unified Filter Objects**: Modular `FilterParams` dependency classes for each entity (Schools, Hospitals, PGs, etc.).
-*   **Dual-Path Access**: All search endpoints support both the root collection URL `/` and a dedicated `/filters` alias.
+### 🔍 1. Smart Education Hub
+- **Tabbed Navigation**: Schools, Colleges, Coaching Centers, and Mess services. (Dynamic)
+- **Nearby Sorting**: Automated "Nearby on Top" logic based on real-time student coordinates.
 
-### 📍 2. Redis-Powered Geo-Spatial Intelligence
-*   **High-Speed Proximity Search**: Leverages Redis Geo-spatial indexes (`GEOADD`, `GEORADIUS`) for millisecond-fast nearby searches.
-*   **Smart Fallback**: Automatically falls back to database-level Haversine distance calculations if Redis is unavailable or coordinates are missing.
-*   **Dynamic Radius**: Filter results within a user-defined radius (e.g., 5km, 20km).
+### 📍 2. Redis Geo-Spatial Indexing
+- **Micro-second Proximity Search**: Uses Redis `GEO` commands for ultra-fast location filtering.
+- **Inclusive Search**: Results are visible worldwide, with distant results labeled in-UI.
 
-### ⚡ 3. Intelligent Caching
-*   **MD5 Search Caching**: Hashed cache keys derived from all filter parameters ensure repeat searches are served from Redis in milliseconds.
-*   **Single-Entity Caching**: Individual detail endpoints (`GET /{id}`) utilize `@cache` decorators with smart expiration.
-
-### 🏢 4. Comprehensive Service Modules
-*   **Education Hub**: Colleges, Schools, Coaching Classes, and Mess Services.
-*   **Medical Emergency**: Hospitals, Doctors, Ambulance Services, and Blood Banks.
-*   **Stay & Accommodation**: PGs (Paying Guests) and Hostels with Amenity-based filtering.
-
-### 🛡️ 5. Production Security
-*   **Admin & Student Roles**: Role-based access control (RBAC) via modular FastAPI dependencies.
-*   **Rate Limiting**: Protects authentication endpoints from abuse using Redis-based sliding windows.
-
----
-
-## 📂 Project Structure
-
-```text
-backend/
-├── app/
-│   ├── api/v1/
-│   │   ├── endpoints/          # Route handlers (Education, Medical, Stay, Auth)
-│   │   └── api.py              # Main router inclusion hub
-│   ├── core/                   # Core config, database, location, redis, and auth logic
-│   ├── models/                 # SQLAlchemy ORM models
-│   ├── schemas/                # Pydantic validation schemas
-│   └── services/               # Reusable business logic services
-├── alembic/                    # Database migration versions and env scripts
-├── scripts/                    # Utility scripts (init_db.py, sync_redis_geo.py)
-├── .env.example                # Template for environment variables
-└── README.md                   # You are here!
-```
+### 🌓 3. Modern Premium UI
+- **Global Dark Mode**: Full system-aware theme compatibility.
+- **Micro-animations**: Smooth transitions between service tabs and detail pages.
 
 ---
 
 ## 🏁 Getting Started
 
-### 1. Prerequisites
-*   Python 3.11+
-*   PostgreSQL 14+
-*   **Redis Server** (required for geo-spatial & caching)
-
-### 2. Installation
+### 1. Backend Setup
 ```bash
 # Navigate to backend 
 cd backend
 
-# Install dependencies
+# Install dependencies and activate venv
+python -m venv venv
+.\venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-### 3. Database & Cache Initialization
-```bash
-# Apply migrations
+# Run migrations and seed data
 alembic upgrade head
+python seed_data.py
 
-# Sync database records to Redis Geo-Index
-python scripts/sync_redis_geo.py
-
-# Initialize database (Admin user, etc.)
-python scripts/init_db.py
-```
-
-### 4. Run the Server
-```bash
+# Launch server
 uvicorn app.main:app --reload --port 8000
 ```
 Visit **[http://localhost:8000/docs](http://localhost:8000/docs)** to explore the API.
+
+### 2. Frontend Setup (Flutter)
+```bash
+# Navigate to frontend
+cd Educare_connect/frontend/educonnect
+
+# Install dependencies
+flutter pub get
+
+# Launch for Web (Premium Experience)
+flutter run -d chrome --web-port 2001
+```
+
+---
+
+## 📂 Project Structure
+```text
+├── backend/                # FastAPI logic, Postgres Models, Redis Caching
+├── frontend/educare/       # Flutter application, UI Components, API Services
+├── how_to_run.txt          # Quick setup guide for developers
+└── README.md               # Overview of the project architecture
+```
 
 ---
 

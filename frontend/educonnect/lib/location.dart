@@ -1,32 +1,40 @@
 import 'package:flutter/material.dart';
 import 'dashboard/dashboard.dart';
+
 class LocationPage extends StatelessWidget {
   const LocationPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            
             /// Top Icon Circle
             Container(
               height: 110,
               width: 110,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF6C4DFF),
-                    Color(0xFF4A34E0),
-                  ],
+                  colors: isDark 
+                    ? [const Color(0xFF8C6DFF), const Color(0xFF6C4DFF)]
+                    : [const Color(0xFF6C4DFF), const Color(0xFF4A34E0)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark ? Colors.blueAccent.withOpacity(0.2) : Colors.black12,
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  )
+                ]
               ),
               child: const Icon(
                 Icons.location_on_outlined,
@@ -38,26 +46,26 @@ class LocationPage extends StatelessWidget {
             const SizedBox(height: 40),
 
             /// Title
-            const Text(
+            Text(
               "Enable Location Access",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: isDark ? Colors.white : Colors.black87,
               ),
             ),
 
             const SizedBox(height: 20),
 
             /// Description
-            const Text(
+            Text(
               "We need your location to show nearby educational "
               "institutions, medical facilities, and PG accommodations",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.black54,
+                color: isDark ? Colors.grey.shade400 : Colors.black54,
                 height: 1.5,
               ),
             ),
@@ -70,23 +78,24 @@ class LocationPage extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF6C4DFF),
-                      Color(0xFF4A34E0),
-                    ],
+                  gradient: LinearGradient(
+                    colors: isDark 
+                      ? [const Color(0xFF8C6DFF), const Color(0xFF6C4DFF)]
+                      : [const Color(0xFF6C4DFF), const Color(0xFF4A34E0)],
                   ),
+                  boxShadow: [
+                    if (!isDark) const BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4))
+                  ]
                 ),
                 child: ElevatedButton(
-                  /// ALLOW
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const DashboardPage(),
-                        ),
-                      );
-                    },
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DashboardPage(),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
@@ -111,7 +120,6 @@ class LocationPage extends StatelessWidget {
 
             /// Skip Button
             TextButton(
-              /// ALLOW
               onPressed: () {
                 Navigator.pushReplacement(
                   context,
@@ -120,11 +128,11 @@ class LocationPage extends StatelessWidget {
                   ),
                 );
               },
-              child: const Text(
+              child: Text(
                 "Skip for Now",
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.black87,
+                  color: isDark ? Colors.grey.shade300 : Colors.black87,
                 ),
               ),
             ),
@@ -132,13 +140,13 @@ class LocationPage extends StatelessWidget {
             const SizedBox(height: 30),
 
             /// Privacy Text
-            const Text(
+            Text(
               "Your location data is only used to provide relevant results\n"
               "and is never shared with third parties",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.black45,
+                color: isDark ? Colors.grey.shade600 : Colors.black45,
               ),
             ),
           ],

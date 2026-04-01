@@ -105,35 +105,34 @@ async def get_hospitals(
         search = f"%{filters.query}%"
         query = query.filter(or_(Hospital.name.ilike(search), Hospital.address.ilike(search)))
 
-    # 4. Geo-spatial Logic
+    # 4. Geo-spatial Logic (Inclusive Search)
     hospitals_list = []
     use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    dist_map = {}
     
     if use_geo:
         nearby_results = await geo_search_nearby("geo:hospitals", filters.lon, filters.lat, filters.radius)
-        nearby_ids = [res["id"] for res in nearby_results]
         dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        query = query.filter(Hospital.id.in_(nearby_ids))
-        results = query.all()
-        for hospital, avg_rating in results:
-            hospital.distance = dist_map.get(hospital.id)
-            hospital.rating = float(avg_rating) if avg_rating else 0.0
-            hospitals_list.append(hospital)
-    else:
-        results = query.all()
-        for hospital, avg_rating in results:
-            hospital.rating = float(avg_rating) if avg_rating else 0.0
-            hospital.distance = None
-            hospitals_list.append(hospital)
+    results = query.all()
+    for hospital, avg_rating in results:
+        hospital.rating = float(avg_rating) if avg_rating else 0.0
+        hospital.distance = dist_map.get(hospital.id)
+        hospitals_list.append(hospital)
 
-    # 5. Sorting
+    # 5. Sorting (Prioritize distance if geolocation is active)
     is_desc = (filters.order == Order.DESC)
-    if filters.sort_by == SortBy.DISTANCE and use_geo:
+    
+    # If no explicit sorting provided and we have geo, use distance
+    sort_criterion = filters.sort_by
+    if use_geo and (not filters.sort_by or filters.sort_by == SortBy.NAME):
+        sort_criterion = SortBy.DISTANCE
+        
+    if sort_criterion == SortBy.DISTANCE and use_geo:
         hospitals_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
-    elif filters.sort_by == SortBy.RATING:
+    elif sort_criterion == SortBy.RATING:
         hospitals_list.sort(key=lambda x: x.rating, reverse=is_desc)
-    elif filters.sort_by == SortBy.NAME:
+    elif sort_criterion == SortBy.NAME:
         hospitals_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
 
     # 6. Pagination & Caching

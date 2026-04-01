@@ -1,63 +1,57 @@
-EduCare Connect - Backend Setup Guide
-====================================
+EduCare Connect - Setup & Execution Guide
+========================================
 
-This guide provides instructions to set up the FastAPI backend with PostgreSQL and Alembic.
+This document provides complete instructions to set up and run both the Backend (FastAPI) and the Frontend (Flutter).
 
-1. PREREQUISITES
-----------------
-- Python 3.11+ installed.
-- PostgreSQL installed and running.
-- A database named 'educare_connect' created in PostgreSQL.
-
-2. INITIAL SETUP
-----------------
+-----------------------------------------------------------
+1. BACKEND SETUP (FastAPI)
+-----------------------------------------------------------
 1. Navigate to the backend directory:
    cd backend
 
-2. Create a virtual environment:
+2. Create and Activate Virtual Environment:
    python -m venv venv
+   .\venv\Scripts\activate (Windows)
+   source venv/bin/activate (macOS/Linux)
 
-3. Activate the virtual environment:
-   Windows: .\venv\Scripts\activate
-   macOS/Linux: source venv/bin/activate
-
-4. Install dependencies:
+3. Install requirements:
    pip install -r requirements.txt
 
-3. ENVIRONMENT CONFIGURATION
-----------------------------
-1. Create a file named '.env' in the 'backend/' directory.
-2. Add your PostgreSQL connection details:
+4. Configure .env:
+   Create a '.env' file in 'backend/' with:
+   DATABASE_URL=postgresql+psycopg2://postgres:[password]@localhost:5432/educare_connect
+   REDIS_URL=redis://localhost:6379/0
+   SECRET_KEY=[your_key]
 
-DATABASE_URL=postgresql+psycopg2://postgres:your_password@localhost:5432/educare_connect
-SECRET_KEY=your_secret_key_here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-4. DATABASE MIGRATIONS (ALEMBIC)
---------------------------------
-Ensure your database schema is up-to-date before running the app.
-
-1. Apply existing migrations:
+5. Run Migrations:
    alembic upgrade head
 
-2. Generate new migrations (if you change models):
-   alembic revision --autogenerate -m "description_of_change"
+6. Seed Sample Data (Required for Tabs):
+   python seed_data.py
 
-3. Apply new migrations:
-   alembic upgrade head
+7. Launch Backend:
+   uvicorn app.main:app --reload --port 8000
+   (Access docs at: http://localhost:8000/docs)
 
-5. RUNNING THE APPLICATION
---------------------------
-Start the FastAPI server:
-uvicorn app.main:app --reload --port 8000
+-----------------------------------------------------------
+2. FRONTEND SETUP (Flutter)
+-----------------------------------------------------------
+1. Navigate to the frontend directory:
+   cd Educare_connect/frontend/educonnect
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+2. Install Library dependencies:
+   flutter pub get
 
-6. TESTING LOCATION FEATURES
-----------------------------
-Test nearby search by passing coordinates to service endpoints:
-Example: http://localhost:8000/api/v1/medical/hospitals/?lat=18.52&lon=73.85&radius=5
+3. Launch for Web (Recommended):
+   flutter run -d chrome --web-port 2001
 
-TIP: If you have issues with 'psycopg2' on Windows, ensure PostgreSQL is properly added to your system PATH.
+4. Launch for Android/iOS:
+   flutter run
+   (Ensure a device or emulator is connected)
+
+-----------------------------------------------------------
+3. TROUBLESHOOTING
+-----------------------------------------------------------
+- If tabs are empty: Run 'python seed_data.py' in the backend directory.
+- If icons are not visible: Ensure you are on a stable internet connection for Material Icons load.
+- Redis Errors: Ensure Redis is running locally on port 6379 (via Docker or local service).

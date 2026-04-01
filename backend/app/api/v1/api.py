@@ -11,6 +11,8 @@ from app.api.v1.endpoints import user
 from app.api.v1.endpoints import settings
 from app.api.v1.endpoints import notification
 from app.api.v1.endpoints.medical import hospitals, doctors, blood_banks, ambulances
+from app.api.v1.endpoints import reviews
+from app.api.v1.endpoints import visits
 
 
 
@@ -69,6 +71,12 @@ api_router.include_router(
 
 api_router.include_router(
     notification.router
+)
+
+api_router.include_router(
+    reviews.router,
+    prefix="/reviews",
+    tags=["Reviews"]
 )
 
 # Medical Group

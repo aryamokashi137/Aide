@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'services/api_service.dart';
 import 'signup_page.dart';
 import 'forgot_password_page.dart';
 import 'hover_button.dart';
@@ -13,128 +14,147 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  void handleLogin() {
+  final ApiService _apiService = ApiService();
+  bool _isLoading = false;
+
+  void handleLogin() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const LocationPage(),
-        ),
-      );
+      setState(() => _isLoading = true);
+      try {
+        await _apiService.login(emailController.text, passwordController.text);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const LocationPage(),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: ${e.toString()}')),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 40),
-
-                const Icon(Icons.school, size: 80, color: Colors.blue),
-                const SizedBox(height: 20),
-
-                const Text(
-                  "Welcome Back",
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 30),
-
-                /// EMAIL
-                TextFormField(
-                  controller: emailController,
-                  decoration: InputDecoration(
-                    hintText: "Email",
-                    prefixIcon: const Icon(Icons.email),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 20),
+                  Icon(Icons.school, size: 80, color: isDark ? Colors.blueAccent : Colors.blue),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Welcome Back",
+                    style: TextStyle(
+                      fontSize: 28, 
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Email is required";
-                    }
-                    if (!value.contains("@")) {
-                      return "Enter valid email";
-                    }
-                    return null;
-                  },
-                ),
+                  const SizedBox(height: 30),
 
-                const SizedBox(height: 16),
+                  /// EMAIL
+                  TextFormField(
+                    controller: emailController,
+                    decoration: InputDecoration(
+                      hintText: "Email",
+                      prefixIcon: const Icon(Icons.email),
+                      filled: true,
+                      fillColor: Theme.of(context).cardColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return "Email is required";
+                      if (!value.contains("@")) return "Enter valid email";
+                      return null;
+                    },
+                  ),
 
-                /// PASSWORD
-                TextFormField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    hintText: "Password",
-                    prefixIcon: const Icon(Icons.lock),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+
+                  /// PASSWORD
+                  TextFormField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      hintText: "Password",
+                      prefixIcon: const Icon(Icons.lock),
+                      filled: true,
+                      fillColor: Theme.of(context).cardColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return "Password is required";
+                      if (value.length < 6) return "Minimum 6 characters";
+                      return null;
+                    },
+                  ),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ForgotPasswordPage(),
+                          ),
+                        );
+                      },
+                      child: const Text("Forgot Password?"),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Password is required";
-                    }
-                    if (value.length < 6) {
-                      return "Minimum 6 characters";
-                    }
-                    return null;
-                  },
-                ),
 
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
+                  const SizedBox(height: 24),
+
+                  _isLoading 
+                    ? const CircularProgressIndicator()
+                    : HoverButton(
+                        text: "Login",
+                        onPressed: handleLogin,
+                      ),
+
+                  const SizedBox(height: 16),
+
+                  TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const ForgotPasswordPage(),
+                          builder: (_) => const SignupPage(),
                         ),
                       );
                     },
-                    child: const Text("Forgot Password?"),
+                    child: const Text("Don't have an account? Sign up"),
                   ),
-                ),
 
-                const SizedBox(height: 24),
-
-                HoverButton(
-                  text: "Login",
-                  onPressed: handleLogin,
-                ),
-
-                const SizedBox(height: 16),
-
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SignupPage(),
-                      ),
-                    );
-                  },
-                  child: const Text("Don't have an account? Sign up"),
-                ),
-
-                const SizedBox(height: 40),
-              ],
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
           ),
         ),

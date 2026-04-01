@@ -30,7 +30,7 @@ async def sync_all_geo():
         (Mess, "geo:mess"),
     ]
     
-    print("🚀 Starting Geo-spatial data sync from PostgreSQL to Redis...")
+    print(" Starting Geo-spatial data sync from PostgreSQL to Redis...")
     
     try:
         for model, redis_key in entities:

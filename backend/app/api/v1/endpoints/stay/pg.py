@@ -118,35 +118,34 @@ async def get_pgs(
             PG.facilities_available.ilike(search)
         ))
 
-    # 4. Geo-spatial Logic
+    # 4. Geo-spatial Logic (Inclusive Search)
     pgs_list = []
     use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    dist_map = {}
     
     if use_geo:
         nearby_results = await geo_search_nearby("geo:pgs", filters.lon, filters.lat, filters.radius)
-        nearby_ids = [res["id"] for res in nearby_results]
         dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        query = query.filter(PG.id.in_(nearby_ids))
-        results = query.all()
-        for pg, avg_rating in results:
-            pg.distance = dist_map.get(pg.id)
-            pg.rating = float(avg_rating) if avg_rating else 0.0
-            pgs_list.append(pg)
-    else:
-        results = query.all()
-        for pg, avg_rating in results:
-            pg.rating = float(avg_rating) if avg_rating else 0.0
-            pg.distance = None
-            pgs_list.append(pg)
+    results = query.all()
+    for pg, avg_rating in results:
+        pg.rating = float(avg_rating) if avg_rating else 0.0
+        pg.distance = dist_map.get(pg.id)
+        pgs_list.append(pg)
 
-    # 5. Sorting
+    # 5. Sorting (Prioritize distance if geolocation is active)
     is_desc = (filters.order == Order.DESC)
-    if filters.sort_by == SortBy.DISTANCE and use_geo:
+    
+    # If no explicit sorting provided and we have geo, use distance
+    sort_criterion = filters.sort_by
+    if use_geo and (not filters.sort_by or filters.sort_by == SortBy.NAME):
+        sort_criterion = SortBy.DISTANCE
+        
+    if sort_criterion == SortBy.DISTANCE and use_geo:
         pgs_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
-    elif filters.sort_by == SortBy.RATING:
+    elif sort_criterion == SortBy.RATING:
         pgs_list.sort(key=lambda x: x.rating, reverse=is_desc)
-    elif filters.sort_by == SortBy.NAME:
+    elif sort_criterion == SortBy.NAME:
         pgs_list.sort(key=lambda x: x.name.lower(), reverse=is_desc)
 
     # 6. Pagination & Caching

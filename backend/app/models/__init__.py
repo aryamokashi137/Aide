@@ -13,3 +13,4 @@ from app.models.medical.doctor import Doctor
 from app.models.medical.blood_bank import BloodBank
 from app.models.medical.ambulance import Ambulance
 from app.models.medical.review import MedicalReview
+from app.models.education.review import Review

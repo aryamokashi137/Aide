@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'login_page.dart';
-// import 'hover_button.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -46,6 +45,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget buildIndicator(int index) {
     bool isActive = currentPage == index;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -53,7 +53,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       width: isActive ? 26 : 8,
       height: 8,
       decoration: BoxDecoration(
-        color: isActive ? Colors.deepPurple : Colors.deepPurple.shade100,
+        color: isActive ? Colors.deepPurple : (isDark ? Colors.grey.shade700 : Colors.deepPurple.shade100),
         borderRadius: BorderRadius.circular(20),
       ),
     );
@@ -66,6 +66,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     required String subtitle,
     required bool isLast,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
       child: Column(
@@ -104,7 +106,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
                       colors: [
-                        color.withValues(alpha: 0.75),
+                        color.withOpacity(0.75),
                         color,
                       ],
                       begin: Alignment.topLeft,
@@ -112,7 +114,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: color.withValues(alpha: 0.25),
+                        color: color.withOpacity(0.25),
                         blurRadius: 30,
                         spreadRadius: 5,
                         offset: const Offset(0, 10),
@@ -134,10 +136,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
               title,
               key: ValueKey(title),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: isDark ? Colors.white : Colors.black87,
                 height: 1.3,
               ),
             ),
@@ -175,35 +177,35 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
           /// BUTTON
           SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: isLast
-                ? goToLogin
-                : () {
-                    _controller.nextPage(
-                      duration: const Duration(milliseconds: 450),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              elevation: 6,
-              shadowColor: Colors.blue.withValues(alpha: 0.3),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: isLast
+                  ? goToLogin
+                  : () {
+                      _controller.nextPage(
+                        duration: const Duration(milliseconds: 450),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                elevation: 6,
+                shadowColor: Colors.blue.withOpacity(0.3),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
-            ),
-            child: Text(
-              isLast ? "Get Started" : "Next",
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+              child: Text(
+                isLast ? "Get Started" : "Next",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
-        ),
 
           const SizedBox(height: 30),
         ],
@@ -219,19 +221,22 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F6FF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: isDark ? null : LinearGradient(
             colors: [
               Colors.deepPurple.shade50,
               Colors.white,
-              Colors.blue.shade50.withValues(alpha: 0.35),
+              Colors.blue.shade50.withOpacity(0.35),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
+          color: isDark ? Theme.of(context).scaffoldBackgroundColor : null,
         ),
         child: PageView.builder(
           controller: _controller,

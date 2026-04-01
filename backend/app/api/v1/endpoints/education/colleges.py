@@ -117,37 +117,32 @@ async def get_colleges(
             )
         )
 
-    # 4. Handle Geo-spatial logic (Hybrid: Redis + SQL)
+    # 4. Handle Geo-spatial logic (Inclusive Search)
     colleges_list = []
     use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    dist_map = {}
     
     if use_geo:
-        # Use Redis for high-performance proximity finding
+        # Check Redis for nearby results (to mark as nearby)
         nearby_results = await geo_search_nearby("geo:colleges", filters.lon, filters.lat, filters.radius)
-        nearby_ids = [res["id"] for res in nearby_results]
         dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        # Filter DB query to only include nearby colleges
-        query = query.filter(College.id.in_(nearby_ids))
-        
-        # Execute query
-        results = query.all()
-        for college, avg_rating in results:
-            college.distance = dist_map.get(college.id)
-            college.rating = float(avg_rating) if avg_rating else 0.0
-            colleges_list.append(college)
-    else:
-        # Standard DB fetch
-        results = query.all()
-        for college, avg_rating in results:
-            college.rating = float(avg_rating) if avg_rating else 0.0
-            college.distance = None
-            colleges_list.append(college)
+    # Execute full query (without strict nearby filter)
+    results = query.all()
+    for college, avg_rating in results:
+        college.rating = float(avg_rating) if avg_rating else 0.0
+        college.distance = dist_map.get(college.id)
+        colleges_list.append(college)
 
-    # 5. Apply Sorting
+    # 5. Apply Sorting (Prioritize distance if geolocation is active)
     is_desc = (filters.order == Order.DESC)
     
-    if filters.sort_by == SortBy.DISTANCE and use_geo:
+    # If no explicit sorting provided and we have geo, use distance
+    sort_criterion = filters.sort_by
+    if use_geo and (not filters.sort_by or filters.sort_by == SortBy.NAME):
+        sort_criterion = SortBy.DISTANCE
+        
+    if sort_criterion == SortBy.DISTANCE and use_geo:
         colleges_list.sort(key=lambda x: x.distance if x.distance is not None else float('inf'), reverse=is_desc)
     elif filters.sort_by == SortBy.RATING:
         colleges_list.sort(key=lambda x: x.rating, reverse=is_desc)

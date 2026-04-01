@@ -28,6 +28,9 @@ class UserSelfUpdate(BaseModel):
     social_github: Optional[str] = Field(None, max_length=255)
     
     push_notifications: Optional[bool] = None
+    location_access: Optional[bool] = None
+    dark_mode: Optional[bool] = None
+    preferred_language: Optional[str] = None
 
 class UserUpdate(UserSelfUpdate):
     pass
@@ -55,6 +58,9 @@ class UserResponse(BaseModel):
     social_linkedin: Optional[str] = None
     social_github: Optional[str] = None
     push_notifications: bool
+    location_access: bool
+    dark_mode: bool
+    preferred_language: str
     role: UserRole
     is_active: bool
     created_at: datetime

@@ -99,27 +99,20 @@ async def get_coaching_classes(
         search = f"%{filters.query}%"
         query = query.filter(or_(Coaching.name.ilike(search), Coaching.address.ilike(search)))
 
-    # 4. Geo-spatial Logic
+    # 4. Geo-spatial Logic (Inclusive Search)
     coaching_data_list = []
     use_geo = all(v is not None for v in [filters.lat, filters.lon])
+    dist_map = {}
     
     if use_geo:
         nearby_results = await geo_search_nearby("geo:coaching", filters.lon, filters.lat, filters.radius)
-        nearby_ids = [res["id"] for res in nearby_results]
         dist_map = {res["id"]: res["dist"] for res in nearby_results}
         
-        query = query.filter(Coaching.id.in_(nearby_ids))
-        results = query.all()
-        for coaching, avg_rating in results:
-            coaching.distance = dist_map.get(coaching.id)
-            coaching.rating = float(avg_rating) if avg_rating else 0.0
-            coaching_data_list.append(coaching)
-    else:
-        results = query.all()
-        for coaching, avg_rating in results:
-            coaching.rating = float(avg_rating) if avg_rating else 0.0
-            coaching.distance = None
-            coaching_data_list.append(coaching)
+    results = query.all()
+    for coaching, avg_rating in results:
+        coaching.rating = float(avg_rating) if avg_rating else 0.0
+        coaching.distance = dist_map.get(coaching.id)
+        coaching_data_list.append(coaching)
 
     # 5. Sorting
     is_desc = (filters.order == Order.DESC)
