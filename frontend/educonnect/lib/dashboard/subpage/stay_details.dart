@@ -166,20 +166,45 @@ class _PGDetailsPageState extends State<PGDetailsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle("Description"),
-        _infoCard(child: const Text("Perfect for students with focus on safety and comfort.")),
+        _infoCard(child: Text(
+          widget.pg.description ?? "Perfect for students with focus on safety and comfort. This property offers a vibrant community and modern living spaces designed for productivity.",
+          style: const TextStyle(height: 1.5),
+        )),
         _sectionTitle("Pricing"),
-        _infoCard(child: Text("Rent: ₹${widget.pg.rent}/mo", style: const TextStyle(fontWeight: FontWeight.bold))),
+        _infoCard(child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text("Rent: ₹${widget.pg.rent}/mo", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple)),
+            Text(widget.pg.foodIncluded ? "Food Included" : "Food Not Included", style: TextStyle(color: widget.pg.foodIncluded ? Colors.green : Colors.grey, fontSize: 12)),
+          ],
+        )),
       ],
     );
   }
 
   Widget _amenitiesTab() {
-    return Column(
-      children: const [
-        ListTile(leading: Icon(Icons.wifi, color: Colors.blue), title: Text("Unlimited WiFi")),
-        ListTile(leading: Icon(Icons.security, color: Colors.red), title: Text("CCTV & Security")),
-        ListTile(leading: Icon(Icons.restaurant, color: Colors.orange), title: Text("Hygienic Food")),
-      ],
+    final List<String> items = widget.pg.facilities?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? [];
+    
+    if (items.isEmpty) {
+      return Column(
+        children: const [
+          ListTile(leading: Icon(Icons.wifi, color: Colors.blue), title: Text("Unlimited WiFi")),
+          ListTile(leading: Icon(Icons.security, color: Colors.red), title: Text("CCTV & Security")),
+          ListTile(leading: Icon(Icons.restaurant, color: Colors.orange), title: Text("Hygienic Food")),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        return ListTile(
+          leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+          title: Text(items[index]),
+        );
+      },
     );
   }
 

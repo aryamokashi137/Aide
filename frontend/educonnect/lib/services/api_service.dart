@@ -103,6 +103,39 @@ class ApiService {
     }
   }
 
+  Future<List<Hospital>> getDoctors({Map<String, dynamic>? filters}) async {
+    final headers = await _getHeaders();
+    final url = _buildUrl('/medical/doctors', filters);
+    final response = await http.get(Uri.parse(url), headers: headers);
+    if (response.statusCode == 200) {
+      List<dynamic> body = json.decode(response.body);
+      return body.map((item) => Hospital.fromJson(item)).toList();
+    }
+    throw Exception('Failed to load doctors');
+  }
+
+  Future<List<Hospital>> getBloodBanks({Map<String, dynamic>? filters}) async {
+    final headers = await _getHeaders();
+    final url = _buildUrl('/medical/blood-banks', filters);
+    final response = await http.get(Uri.parse(url), headers: headers);
+    if (response.statusCode == 200) {
+      List<dynamic> body = json.decode(response.body);
+      return body.map((item) => Hospital.fromJson(item)).toList();
+    }
+    throw Exception('Failed to load blood banks');
+  }
+
+  Future<List<Hospital>> getAmbulances({Map<String, dynamic>? filters}) async {
+    final headers = await _getHeaders();
+    final url = _buildUrl('/medical/ambulances', filters);
+    final response = await http.get(Uri.parse(url), headers: headers);
+    if (response.statusCode == 200) {
+      List<dynamic> body = json.decode(response.body);
+      return body.map((item) => Hospital.fromJson(item)).toList();
+    }
+    throw Exception('Failed to load ambulances');
+  }
+
   // --- Stay Module ---
   Future<List<PG>> getPGs({Map<String, dynamic>? filters}) async {
     final headers = await _getHeaders();
@@ -135,6 +168,53 @@ class ApiService {
       return data;
     } else {
       throw Exception('Login failed');
+    }
+  }
+
+  Future<void> register(String name, String email, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'full_name': name,
+        'email': email,
+        'password': password,
+      }),
+    );
+
+    if (response.statusCode != 201) {
+      final data = json.decode(response.body);
+      throw Exception(data['detail'] ?? 'Registration failed');
+    }
+  }
+
+  Future<void> forgotPassword(String email) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'email': email}),
+    );
+
+    if (response.statusCode != 200) {
+      final data = json.decode(response.body);
+      throw Exception(data['detail'] ?? 'Failed to send reset code');
+    }
+  }
+
+  Future<void> resetPassword(String email, String otp, String newPassword) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'email': email,
+        'token': otp,
+        'new_password': newPassword,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final data = json.decode(response.body);
+      throw Exception(data['detail'] ?? 'Password reset failed');
     }
   }
 
@@ -199,6 +279,19 @@ class ApiService {
        throw Exception('Failed to post review: $msg (Status: ${response.statusCode})');
     }
   }
+
+  Future<List<Review>> getMyReviews() async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/reviews/me';
+    final response = await http.get(Uri.parse(url), headers: headers);
+
+    if (response.statusCode == 200) {
+      List<dynamic> body = json.decode(response.body);
+      return body.map((item) => Review.fromJson(item)).toList();
+    } else {
+      throw Exception('Failed to load your reviews');
+    }
+  }
   // --- Visits Module ---
   Future<void> scheduleVisit({
     required String entityType,
@@ -239,6 +332,19 @@ class ApiService {
       return List<Map<String, dynamic>>.from(data);
     } else {
       throw Exception('Failed to load visits');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> globalSearch(String query) async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/search/?query=${Uri.encodeComponent(query)}';
+    final response = await http.get(Uri.parse(url), headers: headers);
+
+    if (response.statusCode == 200) {
+      List<dynamic> data = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    } else {
+      throw Exception('Failed to perform search');
     }
   }
 }

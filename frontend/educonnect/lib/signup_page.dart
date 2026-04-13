@@ -15,6 +15,36 @@ class _SignupPageState extends State<SignupPage> {
   final emailController = TextEditingController();
   final phoneController = TextEditingController();
   final passwordController = TextEditingController();
+  final ApiService _apiService = ApiService();
+  bool _isLoading = false;
+
+  Future<void> _handleSignup() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.register(
+        nameController.text.trim(),
+        emailController.text.trim(),
+        passwordController.text,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Account Created! Please check your email to verify."), backgroundColor: Colors.green),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Signup failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +55,7 @@ class _SignupPageState extends State<SignupPage> {
         centerTitle: true,
         backgroundColor: Colors.blue,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
@@ -111,17 +141,13 @@ class _SignupPageState extends State<SignupPage> {
 
               const SizedBox(height: 24),
 
-              HoverButton(
-                text: "Create Account",
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Account Created")),
-                    );
-                    Navigator.pop(context);
-                  }
-                },
-              ),
+              if (_isLoading)
+                const CircularProgressIndicator()
+              else
+                HoverButton(
+                  text: "Create Account",
+                  onPressed: _handleSignup,
+                ),
             ],
           ),
         ),

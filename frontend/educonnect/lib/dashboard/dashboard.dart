@@ -3,6 +3,7 @@ import 'education_page.dart';
 import 'medical_page.dart';
 import 'stay_pg_page.dart';
 import 'profile_page.dart';
+import 'search_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -18,6 +19,7 @@ class _DashboardPageState extends State<DashboardPage> {
     EducationPage(),
     MedicalPage(),
     StayPGPage(),
+    GlobalSearchPage(),
     ProfilePage(),
   ];
 
@@ -31,9 +33,8 @@ class _DashboardPageState extends State<DashboardPage> {
       extendBody: true,
       
       appBar: AppBar(
-        title: const Text("Smart City"),
+        title: const Text("EduCare Connect"),
         elevation: 0,
-        // AppBar uses standard theme colors automatically now
       ),
 
       body: pages[currentIndex],
@@ -64,6 +65,10 @@ class _DashboardPageState extends State<DashboardPage> {
           BottomNavigationBarItem(
             icon: Icon(Icons.home, size: 22),
             label: "Stay/PG",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.search, size: 22),
+            label: "Search",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person, size: 22),

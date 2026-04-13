@@ -312,6 +312,9 @@ class _EducationPageState extends State<EducationPage> {
               location: location,
               fees: fees,
               rating: rating,
+              description: item.description,
+              streams: item.streamsAvailable,
+              courses: item.coursesOffered,
             ),
           ),
         );

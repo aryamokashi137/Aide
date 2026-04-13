@@ -1,7 +1,30 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
+import '../../models/review.dart';
+import 'package:intl/intl.dart';
 
-class ReviewsPage extends StatelessWidget {
+class ReviewsPage extends StatefulWidget {
   const ReviewsPage({super.key});
+
+  @override
+  State<ReviewsPage> createState() => _ReviewsPageState();
+}
+
+class _ReviewsPageState extends State<ReviewsPage> {
+  final ApiService _apiService = ApiService();
+  late Future<List<Review>> _myReviewsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  void _refresh() {
+    setState(() {
+      _myReviewsFuture = _apiService.getMyReviews();
+    });
+  }
 
   Widget reviewCard(BuildContext context, {
     required String category,
@@ -77,35 +100,44 @@ class ReviewsPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
-      ),
-      body: ListView(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text("2 reviews found",
-                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
-          ),
-
-          reviewCard(
-            context,
-            category: "EDUCATION",
-            title: "St. Xavier's High School",
-            rating: 5,
-            review:
-                "Excellent faculty and world-class infrastructure. My child is truly blossoming here. Highly recommended!",
-            date: "2024-02-15",
-          ),
-
-          reviewCard(
-            context,
-            category: "STAY",
-            title: "Comfort Living PG",
-            rating: 4,
-            review:
-                "Very good amenities and properly clean rooms. The owner is cooperative and responds quickly to any issues.",
-            date: "2024-02-10",
-          ),
+        actions: [
+          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh))
         ],
+      ),
+      body: FutureBuilder<List<Review>>(
+        future: _myReviewsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text("You haven't posted any reviews yet."));
+          }
+
+          final reviews = snapshot.data!;
+          return ListView.builder(
+            itemCount: reviews.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text("${reviews.length} reviews found",
+                      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                );
+              }
+              final r = reviews[index - 1];
+              return reviewCard(
+                context,
+                category: r.entityType.toUpperCase(),
+                title: r.entityName,
+                rating: r.rating,
+                review: r.content,
+                date: DateFormat('yyyy-MM-dd').format(r.createdAt),
+              );
+            },
+          );
+        },
       ),
     );
   }

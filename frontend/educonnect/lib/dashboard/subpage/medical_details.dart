@@ -4,37 +4,37 @@ import 'package:flutter/material.dart';
 import 'package:educonnect/widgets/review_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class EducationDetailsPage extends StatefulWidget {
+class MedicalDetailsPage extends StatefulWidget {
   final int id;
   final String name;
   final String category;
   final String image;
   final String location;
-  final String fees;
   final String rating;
-  final String? description;
-  final String? streams;
-  final String? courses;
+  final int availableBeds;
+  final String emergencyContact;
+  final String? phone;
+  final String? website;
 
-  const EducationDetailsPage({
+  const MedicalDetailsPage({
     super.key,
     required this.id,
     required this.name,
     required this.category,
     required this.image,
     required this.location,
-    required this.fees,
     required this.rating,
-    this.description,
-    this.streams,
-    this.courses,
+    required this.availableBeds,
+    required this.emergencyContact,
+    this.phone,
+    this.website,
   });
 
   @override
-  State<EducationDetailsPage> createState() => _EducationDetailsPageState();
+  State<MedicalDetailsPage> createState() => _MedicalDetailsPageState();
 }
 
-class _EducationDetailsPageState extends State<EducationDetailsPage> {
+class _MedicalDetailsPageState extends State<MedicalDetailsPage> {
   final ApiService _apiService = ApiService();
   late Future<List<Review>> _reviewsFuture;
 
@@ -46,11 +46,10 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
 
   String get _backendType {
     final cat = widget.category.toLowerCase();
-    if (cat.contains("college")) return "college";
-    if (cat.contains("school")) return "school";
-    if (cat.contains("coaching")) return "coaching";
-    if (cat.contains("mess")) return "mess";
-    return "college";
+    if (cat.contains("doctor")) return "doctor";
+    if (cat.contains("blood bank")) return "blood_bank";
+    if (cat.contains("ambulance")) return "ambulance";
+    return "hospital";
   }
 
   void _refreshReviews() {
@@ -87,14 +86,18 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
     return _infoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text("Contact Admissions", style: TextStyle(fontWeight: FontWeight.bold)),
-          SizedBox(height: 12),
-          Row(children: [Icon(Icons.phone_outlined, size: 18, color: Colors.deepPurple), SizedBox(width: 10), Text("+91 9876543210")]),
-          SizedBox(height: 8),
-          Row(children: [Icon(Icons.email_outlined, size: 18, color: Colors.deepPurple), SizedBox(width: 10), Text("admissions@edu-connect.com")]),
-          SizedBox(height: 8),
-          Row(children: [Icon(Icons.language_outlined, size: 18, color: Colors.deepPurple), SizedBox(width: 10), Text("www.edu-connect.com")]),
+        children: [
+          const Text("Contact Information", style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Row(children: [const Icon(Icons.emergency_outlined, size: 18, color: Colors.redAccent), const SizedBox(width: 10), Text(widget.emergencyContact)]),
+          const SizedBox(height: 8),
+          if (widget.phone != null) ...[
+            Row(children: [const Icon(Icons.phone_outlined, size: 18, color: Colors.blue), const SizedBox(width: 10), Text(widget.phone!)]),
+            const SizedBox(height: 8),
+          ],
+          if (widget.website != null) ...[
+            Row(children: [const Icon(Icons.language_outlined, size: 18, color: Colors.blue), const SizedBox(width: 10), Text(widget.website!)]),
+          ],
         ],
       ),
     );
@@ -113,14 +116,13 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
           child: ElevatedButton(
             onPressed: () {},
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               elevation: 4,
-              shadowColor: Colors.deepPurple.withOpacity(0.4),
             ),
-            child: const Text("Apply For Admission", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: const Text("Book Appointment / Visit", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ),
         body: Column(
@@ -131,7 +133,7 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
                 Image.network(
                   widget.image,
                   height: 240, width: double.infinity, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(height: 240, color: Colors.grey, child: const Icon(Icons.school, size: 60, color: Colors.white24)),
+                  errorBuilder: (_, __, ___) => Container(height: 240, color: Colors.grey, child: const Icon(Icons.local_hospital_outlined, size: 60, color: Colors.white24)),
                 ),
                 Positioned(
                   top: 40, left: 16,
@@ -163,7 +165,13 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
                             const SizedBox(width: 4),
                             Text(widget.rating, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             const Spacer(),
-                            Text(widget.fees, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text("Available Beds", style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                Text(widget.availableBeds.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                              ],
+                            ),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -180,19 +188,19 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
 
                   /// TABS
                   TabBar(
-                    labelColor: Colors.deepPurple,
+                    labelColor: Colors.redAccent,
                     unselectedLabelColor: Colors.grey,
-                    indicatorColor: Colors.deepPurple,
+                    indicatorColor: Colors.redAccent,
                     indicatorWeight: 3,
                     labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    tabs: const [Tab(text: "Overview"), Tab(text: "Admission"), Tab(text: "Reviews")],
+                    tabs: const [Tab(text: "Overview"), Tab(text: "Services"), Tab(text: "Reviews")],
                   ),
 
                   Expanded(
                     child: TabBarView(
                       children: [
                         _overviewTab(),
-                        _admissionTab(),
+                        _servicesTab(),
                         _reviewsTab(),
                       ],
                     ),
@@ -212,49 +220,15 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle("About This Institution"),
-          _infoCard(child: Text(
-            widget.description ?? "Experience world-class academics with modern labs, state-of-the-art infrastructure, and a focus on holistic student development.", 
-            style: const TextStyle(height: 1.6)
-          )),
+          _sectionTitle("About This Facility"),
+          _infoCard(child: const Text("Providing compassionate and world-class healthcare with specialized treatment wings, advanced diagnostic labs, and 24/7 emergency support.", style: TextStyle(height: 1.6))),
           
-          if (widget.courses != null || widget.streams != null) ...[
-            _sectionTitle("Academics"),
-            _infoCard(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.streams != null) ...[
-                  const Text("Streams:", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(widget.streams!),
-                  const SizedBox(height: 10),
-                ],
-                if (widget.courses != null) ...[
-                  const Text("Courses Offered:", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(widget.courses!),
-                ],
-              ],
-            )),
-          ] else ...[
-            _sectionTitle("Courses Offered"),
-            _infoCard(child: Column(
-              children: const [
-                ListTile(leading: Icon(Icons.science_outlined), title: Text("Science & Engineering")),
-                Divider(),
-                ListTile(leading: Icon(Icons.business_outlined), title: Text("Business Management")),
-                Divider(),
-                ListTile(leading: Icon(Icons.palette_outlined), title: Text("Arts & Humanity")),
-              ],
-            )),
-          ],
-
-          _sectionTitle("Facilities"),
+          _sectionTitle("Working Hours"),
           _infoCard(child: Column(
             children: const [
-              ListTile(leading: Icon(Icons.menu_book_outlined), title: Text("Multi-Floor Digital Library")),
+              ListTile(leading: Icon(Icons.access_time), title: Text("Emergency / ICU"), trailing: Text("24/7", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
               Divider(),
-              ListTile(leading: Icon(Icons.computer_outlined), title: Text("IBM Certified Research Hub")),
-              Divider(),
-              ListTile(leading: Icon(Icons.sports_soccer), title: Text("Outdoor Sports Arena")),
+              ListTile(leading: Icon(Icons.calendar_month), title: Text("OPD Consultations"), trailing: Text("9 AM - 8 PM", style: TextStyle(fontWeight: FontWeight.bold))),
             ],
           )),
 
@@ -264,22 +238,33 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
     );
   }
 
-  Widget _admissionTab() {
+  Widget _servicesTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle("Admission Schedule"),
-          _infoCard(child: const Text("Applications for the 2026 academic batch are now open. Final enrollment date is 15th August.", style: TextStyle(height: 1.6))),
-
-          _sectionTitle("Process Flow"),
+          _sectionTitle("Medical Specialities"),
           _infoCard(child: Column(
             children: const [
-              ListTile(leading: CircleAvatar(child: Text("1"), radius: 12), title: Text("Online Registration")),
-              ListTile(leading: CircleAvatar(child: Text("2"), radius: 12), title: Text("Aptitude Assessment")),
-              ListTile(leading: CircleAvatar(child: Text("3"), radius: 12), title: Text("Panel Interview")),
-              ListTile(leading: CircleAvatar(child: Text("4"), radius: 12), title: Text("Payment & Enrollment")),
+              ListTile(leading: Icon(Icons.favorite_outline, color: Colors.red), title: Text("Cardiology & Heart Surgery")),
+              Divider(),
+              ListTile(leading: Icon(Icons.psychology_outlined, color: Colors.blue), title: Text("Neurology")),
+              Divider(),
+              ListTile(leading: Icon(Icons.child_care_outlined, color: Colors.orange), title: Text("Pediatrics")),
+              Divider(),
+              ListTile(leading: Icon(Icons.biotech_outlined, color: Colors.purple), title: Text("Advanced Diagnostics")),
+            ],
+          )),
+
+          _sectionTitle("Available Facilities"),
+          _infoCard(child: Column(
+            children: const [
+              ListTile(leading: Icon(Icons.emergency), title: Text("24/7 Emergency & ICU")),
+              Divider(),
+              ListTile(leading: Icon(Icons.masks_outlined), title: Text("State-of-the-art Operation Theaters")),
+              Divider(),
+              ListTile(leading: Icon(Icons.medication_outlined), title: Text("Internal Pharmacy")),
             ],
           )),
 
@@ -312,15 +297,15 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
                 try {
                   await _apiService.postReview(_backendType, widget.id, res['rating'], res['comment']);
                   _refreshReviews();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Feedback submitted successfully!")));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thank you for your feedback!")));
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
                 }
               }
             },
-            icon: const Icon(Icons.rate_review_outlined, color: Colors.deepPurple),
-            label: const Text("Write Your Review", style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple.withOpacity(0.1), elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            icon: const Icon(Icons.rate_review_outlined, color: Colors.redAccent),
+            label: const Text("Write Your Review", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.1), elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
           ),
           const SizedBox(height: 24),
           FutureBuilder<List<Review>>(
@@ -336,7 +321,7 @@ class _EducationDetailsPageState extends State<EducationDetailsPage> {
                 itemCount: snapshot.data!.length,
                 itemBuilder: (context, index) {
                   final r = snapshot.data![index];
-                  return _reviewItem(r.userName, r.userName[0], Colors.deepPurple, r.rating.toString(), r.content);
+                  return _reviewItem(r.userName, r.userName[0], Colors.redAccent, r.rating.toString(), r.content);
                 },
               );
             },

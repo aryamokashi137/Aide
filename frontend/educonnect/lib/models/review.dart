@@ -3,6 +3,8 @@ class Review {
   final String content;
   final int rating;
   final String userName;
+  final String entityName;
+  final String entityType;
   final DateTime createdAt;
 
   Review({
@@ -10,6 +12,8 @@ class Review {
     required this.content,
     required this.rating,
     required this.userName,
+    required this.entityName,
+    required this.entityType,
     required this.createdAt,
   });
 
@@ -19,6 +23,8 @@ class Review {
       content: json['content'],
       rating: json['rating'],
       userName: json['user_name'] ?? "Anonymous User",
+      entityName: json['entity_name'] ?? "Unknown Entity",
+      entityType: json['entity_type'] ?? "unknown",
       createdAt: DateTime.parse(json['created_at']),
     );
   }

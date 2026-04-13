@@ -8,6 +8,8 @@ class PG {
   final double rating;
   final double? distance;
   final String? image;
+  final String? description;
+  final String? facilities;
 
   PG({
     required this.id,
@@ -19,6 +21,8 @@ class PG {
     required this.rating,
     this.distance,
     this.image,
+    this.description,
+    this.facilities,
   });
 
   factory PG.fromJson(Map<String, dynamic> json) {
@@ -32,6 +36,8 @@ class PG {
       rating: (json['rating'] ?? 0.0).toDouble(),
       distance: json['distance']?.toDouble(),
       image: json['image'],
+      description: json['description'],
+      facilities: json['facilities'],
     );
   }
 }

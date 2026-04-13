@@ -27,3 +27,23 @@ class MedicalReview(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+
+    @property
+    def entity_type(self) -> str:
+        if self.hospital_id: return "hospital"
+        if self.doctor_id: return "doctor"
+        return "medical"
+
+    @property
+    def entity_id(self) -> int:
+        return self.hospital_id or self.doctor_id or 0
+
+    @property
+    def entity_name(self) -> str:
+        if self.hospital: return self.hospital.name
+        if self.doctor: return self.doctor.name
+        return "Unknown Medical Center"
+
+    @property
+    def user_name(self) -> str:
+        return self.user.full_name if self.user else "Anonymous Student"

@@ -15,6 +15,12 @@ class TargetType(str, Enum):
     MESS = "mess"
     COACHING = "coaching"
     PG = "pg"
+    HOSPITAL = "hospital"
+    DOCTOR = "doctor"
+    BLOOD_BANK = "blood_bank"
+    AMBULANCE = "ambulance"
+
+from app.models.medical.review import MedicalReview
 
 router = APIRouter()
 
@@ -26,7 +32,11 @@ def create_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    review = Review(
+    # Identify Model class
+    is_medical = target_type in [TargetType.HOSPITAL, TargetType.DOCTOR, TargetType.BLOOD_BANK, TargetType.AMBULANCE]
+    ModelClass = MedicalReview if is_medical else Review
+    
+    review = ModelClass(
         user_id=current_user.id,
         content=review_in.content,
         rating=review_in.rating,
@@ -39,6 +49,8 @@ def create_review(
     elif target_type == TargetType.MESS: review.mess_id = target_id
     elif target_type == TargetType.COACHING: review.coaching_id = target_id
     elif target_type == TargetType.PG: review.pg_id = target_id
+    elif target_type == TargetType.HOSPITAL: review.hospital_id = target_id
+    elif target_type == TargetType.DOCTOR: review.doctor_id = target_id
     
     db.add(review)
     db.commit()
@@ -52,7 +64,10 @@ def get_reviews(
     target_id: int,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Review)
+    is_medical = target_type in [TargetType.HOSPITAL, TargetType.DOCTOR, TargetType.BLOOD_BANK, TargetType.AMBULANCE]
+    ModelClass = MedicalReview if is_medical else Review
+    
+    query = db.query(ModelClass)
     
     if target_type == TargetType.COLLEGE: query = query.filter(Review.college_id == target_id)
     elif target_type == TargetType.SCHOOL: query = query.filter(Review.school_id == target_id)
@@ -60,5 +75,29 @@ def get_reviews(
     elif target_type == TargetType.MESS: query = query.filter(Review.mess_id == target_id)
     elif target_type == TargetType.COACHING: query = query.filter(Review.coaching_id == target_id)
     elif target_type == TargetType.PG: query = query.filter(Review.pg_id == target_id)
+    elif target_type == TargetType.HOSPITAL: query = query.filter(MedicalReview.hospital_id == target_id)
+    elif target_type == TargetType.DOCTOR: query = query.filter(MedicalReview.doctor_id == target_id)
     
-    return query.all()
+@router.get("/me", response_model=List[ReviewResponse])
+def get_my_reviews(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Fetch all reviews authored by the current user (Regular + Medical).
+    """
+    reviews = db.query(Review).filter(
+        Review.user_id == current_user.id,
+        Review.is_active == True
+    ).all()
+    
+    medical_reviews = db.query(MedicalReview).filter(
+        MedicalReview.user_id == current_user.id,
+        MedicalReview.is_active == True
+    ).all()
+    
+    # Combine and sort by date
+    all_reviews = reviews + medical_reviews
+    all_reviews.sort(key=lambda x: x.created_at, reverse=True)
+    
+    return all_reviews

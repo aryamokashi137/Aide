@@ -13,6 +13,7 @@ from app.api.v1.endpoints import notification
 from app.api.v1.endpoints.medical import hospitals, doctors, blood_banks, ambulances
 from app.api.v1.endpoints import reviews
 from app.api.v1.endpoints import visits
+from app.api.v1.endpoints import search
 
 
 
@@ -84,4 +85,16 @@ api_router.include_router(hospitals.router, prefix="/medical")
 api_router.include_router(doctors.router, prefix="/medical")
 api_router.include_router(blood_banks.router, prefix="/medical")
 api_router.include_router(ambulances.router, prefix="/medical")
+
+api_router.include_router(
+    visits.router,
+    prefix="/visits",
+    tags=["Visits"]
+)
+
+api_router.include_router(
+    search.router,
+    prefix="/search",
+    tags=["Global Search"]
+)
 

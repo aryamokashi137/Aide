@@ -7,6 +7,9 @@ class College {
   final double rating;
   final double? distance;
   final String? image;
+  final String? description;
+  final String? streamsAvailable;
+  final String? coursesOffered;
 
   College({
     required this.id,
@@ -17,6 +20,9 @@ class College {
     required this.rating,
     this.distance,
     this.image,
+    this.description,
+    this.streamsAvailable,
+    this.coursesOffered,
   });
 
   factory College.fromJson(Map<String, dynamic> json) {
@@ -41,6 +47,9 @@ class College {
       rating: (json['rating'] ?? json['hygiene_rating'] ?? 0.0).toDouble(),
       distance: json['distance']?.toDouble(),
       image: json['image'],
+      description: json['description'],
+      streamsAvailable: json['streams_available'],
+      coursesOffered: json['courses_offered'],
     );
   }
 }

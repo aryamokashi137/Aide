@@ -18,6 +18,7 @@ class ReviewResponse(ReviewBase):
     user_name: str
     entity_type: str
     entity_id: int
+    entity_name: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
