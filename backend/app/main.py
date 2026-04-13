@@ -26,7 +26,14 @@ from app.core.config import settings
 # Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5000",
+        "http://localhost:5001",
+        "http://localhost:5002",
+        "http://127.0.0.1:5000",
+        "http://127.0.0.1:5001",
+        "http://127.0.0.1:5002",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,15 +49,14 @@ async def on_startup():
         from fastapi_cache import FastAPICache
         from fastapi_cache.backends.redis import RedisBackend
         
-        redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
-        FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
+        from app.core.redis import get_redis_client
+        redis_c = get_redis_client()
+        FastAPICache.init(RedisBackend(redis_c), prefix="fastapi-cache")
         logger.info("Redis cache initialized successfully")
+        
         # Initialize Rate Limiter
         from fastapi_limiter import FastAPILimiter
-        import redis.asyncio as aioredis
-        
-        limiter_redis = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-        await FastAPILimiter.init(limiter_redis)
+        await FastAPILimiter.init(redis_c)
         logger.info("FastAPI Limiter initialized successfully")
     except Exception as e:
         logger.warning(f"Could not initialize Redis services: {e}")

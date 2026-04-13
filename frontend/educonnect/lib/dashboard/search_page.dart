@@ -141,19 +141,29 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   }
 
   void _navigateToDetails(Map<String, dynamic> item) {
-    final type = item['type'] as String;
+    final type = (item['type'] ?? "").toString().toLowerCase();
     final id = item['id'] as int;
+    final name = item['name'] as String;
+    final image = item['image'] as String? ?? "";
 
     if (categoryMapping(type) == 'education') {
          Navigator.push(context, MaterialPageRoute(builder: (_) => EducationDetailsPage(
-           id: id, name: item['name'], category: type.toUpperCase(), image: item['image'] ?? "", location: "...", fees: "...", rating: "..."
+           id: id, name: name, category: type.toUpperCase(), image: image, location: "Local Area", fees: "N/A", rating: "0.0"
          )));
     } else if (type == 'pg' || type == 'hostel') {
-         // Need a PG object or fetch it
-         // For now, simplified
-         Navigator.push(context, MaterialPageRoute(builder: (_) => PGDetailsPage(pg: PG(id: id, name: item['name'], address: "...", rating: 0.0, rent: 0, image: item['image'], foodIncluded: false, gender: 'Any'))));
-    } else if (type == 'hospital') {
-         Navigator.push(context, MaterialPageRoute(builder: (_) => MedicalDetailsPage(id: id, name: item['name'])));
+         Navigator.push(context, MaterialPageRoute(builder: (_) => PGDetailsPage(pg: PG(id: id, name: name, address: "Local Area", rating: 0.0, rent: 0, image: image, foodIncluded: false, gender: 'Any'))));
+    } else {
+         // Default for Medical types (hospital, doctor, etc)
+         Navigator.push(context, MaterialPageRoute(builder: (_) => MedicalDetailsPage(
+           id: id, 
+           name: name, 
+           category: type.toUpperCase(),
+           image: image,
+           location: "Local Area",
+           rating: "0.0",
+           availableBeds: 0,
+           emergencyContact: "N/A",
+         )));
     }
   }
 

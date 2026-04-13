@@ -78,6 +78,8 @@ def get_reviews(
     elif target_type == TargetType.HOSPITAL: query = query.filter(MedicalReview.hospital_id == target_id)
     elif target_type == TargetType.DOCTOR: query = query.filter(MedicalReview.doctor_id == target_id)
     
+    return query.filter(ModelClass.is_active == True).all()
+    
 @router.get("/me", response_model=List[ReviewResponse])
 def get_my_reviews(
     db: Session = Depends(get_db),

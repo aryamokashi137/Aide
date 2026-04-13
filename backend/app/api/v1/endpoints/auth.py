@@ -1,5 +1,5 @@
 import re
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import timedelta, datetime
@@ -48,7 +48,11 @@ from app.api.v1.endpoints.deps import oauth2_scheme
 
 # REGISTER
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(
+    user_data: UserCreate, 
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     try:
         # Normalize email
         email = user_data.email.lower().strip()
@@ -77,8 +81,8 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_user)
 
-        # Send verification email
-        send_verification_email(email, verification_token)
+        # Send verification email in background
+        tasks.add_task(send_verification_email, email, verification_token)
 
         logger.info(f"User registered successfully: {db_user.id}. Verification email sent.")
 
@@ -224,7 +228,11 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
 # FORGOT PASSWORD
 @router.post("/forgot-password", dependencies=[Depends(RateLimiter(times=3, seconds=60))])
-async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+async def forgot_password(
+    request: ForgotPasswordRequest, 
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     email = request.email.lower().strip()
     user = db.query(User).filter(User.email == email).first()
     if user:
@@ -234,8 +242,8 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
         # Store in Redis for 10 minutes
         await set_otp(email, otp_code, expire_seconds=600)
         
-        # Send password reset email (using OTP instead of link if desired, or just code)
-        send_password_reset_email(user.email, otp_code)
+        # Send password reset email in background
+        tasks.add_task(send_password_reset_email, user.email, otp_code)
         logger.info(f"OTP sent to {email} for password reset.")
     
     # Always return success to prevent email enumeration

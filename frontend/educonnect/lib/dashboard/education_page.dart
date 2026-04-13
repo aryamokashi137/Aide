@@ -237,6 +237,9 @@ class _EducationPageState extends State<EducationPage> {
                       location: item.address,
                       fees: "Price: ₹${item.fees}",
                       rating: "${item.rating} ${item.distance != null ? '(${item.distance!.toStringAsFixed(1)} km)' : ''}",
+                      description: item.description,
+                      streams: item.streamsAvailable,
+                      courses: item.coursesOffered,
                     );
                   },
                 );
@@ -297,6 +300,9 @@ class _EducationPageState extends State<EducationPage> {
     required String location,
     required String fees,
     required String rating,
+    String? description,
+    String? streams,
+    String? courses,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
@@ -312,9 +318,9 @@ class _EducationPageState extends State<EducationPage> {
               location: location,
               fees: fees,
               rating: rating,
-              description: item.description,
-              streams: item.streamsAvailable,
-              courses: item.coursesOffered,
+              description: description,
+              streams: streams,
+              courses: courses,
             ),
           ),
         );

@@ -4,6 +4,9 @@ from email.mime.multipart import MIMEMultipart
 from typing import List, Optional
 from app.core.config import settings
 
+import logging
+logger = logging.getLogger(__name__)
+
 def send_email(
     to_email: str,
     subject: str,
@@ -14,7 +17,7 @@ def send_email(
     Sends an email using SMTP settings from config.
     """
     if not all([settings.SMTP_HOST, settings.SMTP_USER, settings.SMTP_PASSWORD]):
-        print("SMTP settings are not fully configured. Email not sent.")
+        logger.warning("SMTP settings are not fully configured. Email not sent.")
         return False
 
     try:
@@ -28,14 +31,18 @@ def send_email(
         msg.attach(MIMEText(body, content_type))
 
         # Connect and send
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+        logger.info(f"Connecting to SMTP host {settings.SMTP_HOST}:{settings.SMTP_PORT}...")
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
             server.starttls()  # Upgrade to secure connection
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
             
+        logger.info(f"Email successfully sent to {to_email}")
         return True
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        # Log more details about the SMTP configuration (without password)
+        logger.debug(f"SMTP Config: Host={settings.SMTP_HOST}, Port={settings.SMTP_PORT}, User={settings.SMTP_USER}")
         return False
 
 def send_verification_email(email: str, token: str):

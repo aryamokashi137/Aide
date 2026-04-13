@@ -4,17 +4,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Global redis client (initialized in main.py)
-redis_client: aioredis.Redis = None
+# Proxy class to handle lazy initialization and provide a consistent interface
+class RedisClientProxy:
+    def __init__(self):
+        self._client = None
 
-def get_redis_client() -> aioredis.Redis:
-    global redis_client
-    if redis_client is None:
-        redis_client = aioredis.from_url(
-            settings.REDIS_URL, 
-            encoding="utf8", 
-            decode_responses=True
-        )
+    def _get_client(self):
+        if self._client is None:
+            self._client = aioredis.from_url(
+                settings.REDIS_URL,
+                encoding="utf8",
+                decode_responses=True
+            )
+        return self._client
+
+    def __getattr__(self, name):
+        return getattr(self._get_client(), name)
+
+# Global redis client proxy
+redis_client = RedisClientProxy()
+
+def get_redis_client():
     return redis_client
 
 async def is_token_blacklisted(token: str) -> bool:
